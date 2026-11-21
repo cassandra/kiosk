@@ -1,0 +1,8 @@
+[Unit]
+Description=Scheduled kiosk browser restart check (RESTART_TIME)
+
+[Timer]
+OnCalendar=*-*-* @RESTART_TIME@:00
+
+[Install]
+WantedBy=timers.target

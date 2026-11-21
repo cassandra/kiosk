@@ -2,7 +2,8 @@
 #
 # Each setting says when a change takes effect:
 #   [restart]  sudo systemctl restart kiosk
-#   [timer]    within 5 minutes, or now with: sudo kiosk-brightness auto --force
+#   [timer]    read each time its timer runs (brightness: every 5 minutes;
+#              apply now with: sudo kiosk-brightness auto --force)
 #   [install]  re-run install-kiosk.sh
 #
 # install-kiosk.sh rewrites this file from its template on every run, keeping the
@@ -28,6 +29,19 @@ NIGHT_BRIGHTNESS='15'
 # [timer] Laptop backlight device under /sys/class/backlight (blank = auto-detect).
 # If there is no backlight device, ddcutil (DDC/CI) is used instead.
 BACKLIGHT_DEVICE=''
+
+# [install] Time of the scheduled restart check (24h HHMM). Blank = none: the
+# browser then only restarts on reboot or if it exits.
+RESTART_TIME='0430'
+
+# [timer] At RESTART_TIME: 'yes' = restart the browser every day (clears slow
+# memory growth); 'no' = restart only if Chrome was updated since it started.
+RESTART_DAILY='yes'
+
+# [install] 'yes' = let Ubuntu's automatic updates also update Google Chrome
+# (by default they only update Ubuntu's own packages, so Chrome never updates).
+# The new version runs after the next restart. 'no' = update Chrome yourself.
+AUTO_UPDATE_CHROME='yes'
 
 # [restart] Extra Chrome flags, space separated (e.g. '--force-device-scale-factor=1.25').
 EXTRA_CHROME_FLAGS=''

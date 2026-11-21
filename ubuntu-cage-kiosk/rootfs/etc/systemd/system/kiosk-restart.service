@@ -1,6 +1,6 @@
 [Unit]
-Description=Daily kiosk browser restart
+Description=Scheduled kiosk browser restart (daily, or when Chrome was updated)
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/systemctl restart kiosk.service
+ExecStart=/usr/local/bin/kiosk-restart

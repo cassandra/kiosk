@@ -1,0 +1,7 @@
+// Installed by install-kiosk.sh when AUTO_UPDATE_CHROME='yes'.
+// Ubuntu's unattended-upgrades only updates Ubuntu's own packages by default;
+// this adds Google's Chrome repository. The running browser keeps the old
+// version until kiosk-restart (RESTART_TIME) or a reboot restarts it.
+Unattended-Upgrade::Origins-Pattern {
+    "origin=Google LLC,suite=stable";
+};

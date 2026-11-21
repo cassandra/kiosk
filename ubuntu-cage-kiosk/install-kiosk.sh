@@ -11,12 +11,13 @@
 #   - Waits for the server at start, and recovers from a page that failed to
 #     load during a server outage (start page + kiosk-watchdog).
 #   - Scheduled day/night brightness (laptop backlight or DDC/CI monitor).
-#   - Daily 04:30 browser restart (clears leaks, picks up Chrome updates).
+#   - Scheduled browser restart (daily, or only after a Chrome update), and
+#     Chrome updated by Ubuntu's automatic updates.
 #   - Keyboard volume/mute keys work (triggerhappy -> kiosk-volume).
 #
 # The files it installs are under rootfs/, at the same paths they get on the
-# system. Files ending in .in are templates: @KIOSK_USER@ and
-# @LID_SWITCH_ACTION@ are filled in, and the .in suffix is dropped.
+# system. Files ending in .in are templates: @KIOSK_USER@, @LID_SWITCH_ACTION@
+# and @RESTART_TIME@ are filled in, and the .in suffix is dropped.
 #
 # Usage:   sudo ./install-kiosk.sh [--config <file>] [<url>]
 #   <url>            the page to show; overrides KIOSK_URL from any config file.
@@ -46,6 +47,7 @@ install_template() {
     install -d -m 755 "$(dirname "/$2")"
     sed -e "s|@KIOSK_USER@|$KIOSK_USER|g" \
         -e "s|@LID_SWITCH_ACTION@|$LID_SWITCH_ACTION|g" \
+        -e "s|@RESTART_TIME@|$RESTART_TIME|g" \
         "$ROOTFS/$2.in" > "/$2"
     chmod "$1" "/$2"
 }
@@ -172,6 +174,20 @@ case "$LID_SWITCH_ACTION" in
     *) die "LID_SWITCH_ACTION must be 'suspend' or 'ignore' (got '$LID_SWITCH_ACTION')" ;;
 esac
 
+# Restart check time: HHMM in the settings, HH:MM for systemd; blank = none.
+RESTART_TIME=$(config_get "$CONFIG" RESTART_TIME)
+if [ -n "$RESTART_TIME" ]; then
+    [[ $RESTART_TIME =~ ^([01][0-9]|2[0-3])[0-5][0-9]$ ]] \
+        || die "RESTART_TIME must be 24h HHMM or blank (got '$RESTART_TIME')"
+    RESTART_TIME="${RESTART_TIME:0:2}:${RESTART_TIME:2:2}"
+fi
+
+AUTO_UPDATE_CHROME=$(config_get "$CONFIG" AUTO_UPDATE_CHROME)
+case "$AUTO_UPDATE_CHROME" in
+    yes|no) ;;
+    *) die "AUTO_UPDATE_CHROME must be 'yes' or 'no' (got '$AUTO_UPDATE_CHROME')" ;;
+esac
+
 # ---------------------------------------------------------------------------
 step "Installing the browser launcher, start page, watchdog and Chrome policy"
 install_file 755 usr/local/bin/kiosk-browser
@@ -179,6 +195,14 @@ install_file 644 usr/local/share/kiosk/start.html
 install_file 755 usr/local/bin/kiosk-watchdog
 # Policy: belt-and-suspenders for autoplay, and quiet the prompts.
 install_file 644 etc/opt/chrome/policies/managed/kiosk.json
+
+# ---------------------------------------------------------------------------
+step "Chrome updates: AUTO_UPDATE_CHROME=$AUTO_UPDATE_CHROME"
+if [ "$AUTO_UPDATE_CHROME" = yes ]; then
+    install_file 644 etc/apt/apt.conf.d/51kiosk-chrome-updates
+else
+    rm -f /etc/apt/apt.conf.d/51kiosk-chrome-updates
+fi
 
 # ---------------------------------------------------------------------------
 step "Installing kiosk-brightness"
@@ -205,8 +229,14 @@ install_template 644 etc/systemd/system/kiosk.service
 install_template 644 etc/systemd/system/kiosk-watchdog.service
 install_file 644 etc/systemd/system/kiosk-brightness.service
 install_file 644 etc/systemd/system/kiosk-brightness.timer
+install_file 755 usr/local/bin/kiosk-restart
 install_file 644 etc/systemd/system/kiosk-restart.service
-install_file 644 etc/systemd/system/kiosk-restart.timer
+if [ -n "$RESTART_TIME" ]; then
+    install_template 644 etc/systemd/system/kiosk-restart.timer
+else
+    systemctl disable --now kiosk-restart.timer 2>/dev/null || true
+    rm -f /etc/systemd/system/kiosk-restart.timer
+fi
 
 # ---------------------------------------------------------------------------
 step "Power: never idle-suspend; lid close -> $LID_SWITCH_ACTION"
@@ -236,7 +266,11 @@ systemctl daemon-reload
 systemctl set-default multi-user.target
 systemctl reenable kiosk.service                          # drops old graphical.target link
 systemctl enable kiosk-watchdog.service                   # runs alongside kiosk.service
-systemctl enable kiosk-brightness.timer kiosk-restart.timer
+systemctl enable kiosk-brightness.timer
+if [ -n "$RESTART_TIME" ]; then
+    systemctl enable kiosk-restart.timer
+    systemctl restart kiosk-restart.timer     # pick up a changed time now
+fi
 systemctl enable triggerhappy.service >/dev/null 2>&1 || true
 systemctl restart triggerhappy.service
 

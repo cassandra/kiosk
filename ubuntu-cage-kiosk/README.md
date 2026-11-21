@@ -19,7 +19,8 @@ For the hardware it has been run on, see [EXAMPLE-SETUP.md](EXAMPLE-SETUP.md).
 | `/etc/default/kiosk` | **Settings**: URL, day/night times and brightness, extra Chrome flags, lid action (see "Settings") |
 | `kiosk-brightness` + timer | Every 5 min, applies the day/night level. Laptop: sysfs backlight. External monitor: `ddcutil` (DDC/CI). A manual change sticks until the next day/night switch. |
 | `kiosk-volume` + `triggerhappy` | Keyboard volume/mute keys work without a desktop (see "Volume keys" below) |
-| `kiosk-restart.timer` | Restarts the browser daily at 04:30 |
+| `kiosk-restart` + timer | At `RESTART_TIME` (default 04:30), restarts the browser: every day, or with `RESTART_DAILY='no'` only if Chrome was updated since it started |
+| `/etc/apt/apt.conf.d/51kiosk-chrome-updates` | With `AUTO_UPDATE_CHROME='yes'` (default), Ubuntu's automatic updates also update Chrome. Without it they never do: they only cover Ubuntu's own packages. |
 | logind drop-in + sleep targets | Never suspends from inactivity. Laptops suspend when the lid closes and resume when it opens; machines without a lid never sleep. Set `LID_SWITCH_ACTION` in `/etc/default/kiosk` (`suspend`/`ignore`) and re-run the installer to change it. With an external monitor attached, closing the lid is ignored. |
 
 ## Install

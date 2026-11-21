@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# kiosk-restart: run by kiosk-restart.timer at RESTART_TIME. Restarts the
+# browser if Chrome was updated since it started, or every day when
+# RESTART_DAILY='yes'.
+set -u
+# shellcheck disable=SC1091
+. /etc/default/kiosk
+
+# An updated package replaces Chrome's files; the running browser still uses
+# the old, now deleted, executable.
+chrome_was_updated() {
+    local pid
+    pid=$(pgrep -u kiosk -o -x chrome) || return 1
+    [[ $(readlink "/proc/$pid/exe") == *' (deleted)' ]]
+}
+
+if chrome_was_updated; then
+    reason='Chrome was updated'
+elif [ "${RESTART_DAILY:-yes}" = yes ]; then
+    reason='daily restart (RESTART_DAILY=yes)'
+else
+    echo "no restart needed"
+    exit 0
+fi
+echo "restarting the kiosk: $reason"
+exec systemctl restart kiosk.service
