@@ -63,16 +63,20 @@ in [`rootfs/etc/default/kiosk`](rootfs/etc/default/kiosk). Each setting is marke
 change takes effect: `[restart]` (restart the kiosk), `[timer]` (the next time its timer
 runs) or `[install]` (re-run the installer).
 
-To choose settings at install time, copy the defaults file, edit it, and pass it in (from
-`kiosk/ubuntu-cage-kiosk`):
+To choose settings at install time, write a file with just the settings you want to change
+(see the defaults file for the names), and pass it in. From `kiosk/ubuntu-cage-kiosk`:
 
 ```sh
-mkdir -p local
-cp rootfs/etc/default/kiosk local/<machine>.conf      # local/ is git-ignored
-# edit local/<machine>.conf, including KIOSK_URL
+mkdir -p local                              # local/ is git-ignored
+cat > local/<machine>.conf <<'EOF'
+KIOSK_URL='http://<server>:<port>/<path>'
+AUDIO_PROFILE='output:hdmi-stereo'
+EOF
 sudo ./install-kiosk.sh --config local/<machine>.conf
 ```
 
+List only what you change rather than copying the whole defaults file: a `--config` file
+overrides the defaults, so a full copy would keep old values even after a default improves.
 Keeping one file per machine makes re-installs repeatable. Each setting comes from, in
 order: the `<url>` argument (for `KIOSK_URL` only), the `--config` file, the existing
 `/etc/default/kiosk`, then the default. The installer rewrites `/etc/default/kiosk` from the
