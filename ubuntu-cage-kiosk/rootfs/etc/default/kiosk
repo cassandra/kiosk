@@ -1,0 +1,23 @@
+# Kiosk settings. Sourced by /usr/local/bin/kiosk-*.
+# After editing:  sudo systemctl restart kiosk          (URL / Chrome flags)
+#                 sudo kiosk-brightness auto --force     (brightness)
+
+KIOSK_URL=''
+
+# Brightness schedule (24h HHMM) and levels (percent, 1-100).
+DAY_START=0630
+NIGHT_START=2355
+DAY_BRIGHTNESS=100
+NIGHT_BRIGHTNESS=15
+
+# Laptop backlight device under /sys/class/backlight (blank = auto-detect).
+# If there is no backlight device, ddcutil (DDC/CI) is used instead.
+BACKLIGHT_DEVICE=''
+
+# Extra Chrome flags, space separated (e.g. '--force-device-scale-factor=1.25').
+EXTRA_CHROME_FLAGS=''
+
+# Laptop lid: 'suspend' (sleep when closed, wake when opened) or 'ignore'.
+# Blank = auto: 'suspend' if the machine has a lid, else 'ignore'.
+# Applied by re-running install-kiosk.sh. Nothing else ever suspends the kiosk.
+LID_SWITCH_ACTION=''

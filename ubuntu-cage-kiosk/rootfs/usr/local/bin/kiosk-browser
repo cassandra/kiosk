@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# Launched by cage (via kiosk.service) as the kiosk user.
+set -u
+# shellcheck disable=SC1091
+. /etc/default/kiosk
+
+DATA="$HOME/.config/kiosk-chrome"
+PREFS="$DATA/Default/Preferences"
+
+# After a power loss/crash, Chrome would show a "Restore pages?" bubble.
+# Mark the previous session as cleanly exited so it never appears.
+if [ -f "$PREFS" ]; then
+    sed -i -e 's/"exited_cleanly":false/"exited_cleanly":true/' \
+           -e 's/"exit_type":"[^"]*"/"exit_type":"Normal"/' "$PREFS"
+fi
+
+# shellcheck disable=SC2086  # EXTRA_CHROME_FLAGS is intentionally word-split
+exec /usr/bin/google-chrome-stable \
+    --user-data-dir="$DATA" \
+    --ozone-platform=wayland \
+    --kiosk \
+    --autoplay-policy=no-user-gesture-required \
+    --no-first-run \
+    --no-default-browser-check \
+    --noerrdialogs \
+    --disable-infobars \
+    --hide-crash-restore-bubble \
+    --password-store=basic \
+    --check-for-update-interval=31536000 \
+    --overscroll-history-navigation=0 \
+    --disable-pinch \
+    --disable-features=Translate,TouchpadOverscrollHistoryNavigation \
+    ${EXTRA_CHROME_FLAGS:-} \
+    "$KIOSK_URL"

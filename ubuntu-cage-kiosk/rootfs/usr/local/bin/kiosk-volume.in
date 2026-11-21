@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# kiosk-volume: change the kiosk session's audio volume (PipeWire, default output).
+#   kiosk-volume up | down | mute | <percent>   e.g. kiosk-volume 60
+#   kiosk-volume                                 show current volume
+# Runs as the kiosk user (volume keys) or via root (sudo kiosk-volume 60).
+set -u
+U=@KIOSK_USER@
+uid=$(id -u "$U") || exit 1
+if [ "$(id -u)" -ne "$uid" ]; then          # always run as the kiosk user
+    exec runuser -u "$U" -- env XDG_RUNTIME_DIR="/run/user/$uid" "$0" "$@"
+fi
+export XDG_RUNTIME_DIR=/run/user/$uid
+SINK=@DEFAULT_AUDIO_SINK@
+STEP=5%
+SOUND=/usr/share/sounds/freedesktop/stereo/audio-volume-change.oga
+
+# One change at a time: a relative step (5%+) reads then writes the volume, so
+# overlapping key presses could otherwise lose steps.
+exec 9>"$XDG_RUNTIME_DIR/kiosk-volume.lock"
+flock 9
+
+click_later() {
+    # No on-screen indicator under cage, so a click confirms the new level.
+    # Debounced: one click ~0.25 s after the LAST press, so rapid presses or a
+    # held key give one clean click at the final level instead of a jumble.
+    [ -r "$SOUND" ] && command -v pw-play >/dev/null || return 0
+    local seqf="$XDG_RUNTIME_DIR/kiosk-volume.seq" me
+    me=$(date +%s%N); echo "$me" > "$seqf"
+    ( sleep 0.25
+      [ "$(cat "$seqf" 2>/dev/null)" = "$me" ] && pw-play "$SOUND"
+    ) 9>&- </dev/null >/dev/null 2>&1 &     # 9>&-: don't hold the lock while waiting
+}
+
+case "${1:-}" in
+    up)      wpctl set-mute "$SINK" 0; wpctl set-volume -l 1.0 "$SINK" "$STEP+"; click_later ;;
+    down)    wpctl set-mute "$SINK" 0; wpctl set-volume "$SINK" "$STEP-"; click_later ;;
+    mute)    wpctl set-mute "$SINK" toggle ;;
+    "")      wpctl get-volume "$SINK" ;;
+    *[0-9]*) wpctl set-mute "$SINK" 0; wpctl set-volume -l 1.0 "$SINK" "${1%\%}%" ;;
+    *)       echo "usage: kiosk-volume [up|down|mute|<percent>]" >&2; exit 2 ;;
+esac

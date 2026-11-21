@@ -1,0 +1,10 @@
+[Unit]
+Description=Check kiosk day/night brightness every 5 minutes
+
+[Timer]
+OnBootSec=45s
+OnCalendar=*:0/5
+AccuracySec=30s
+
+[Install]
+WantedBy=timers.target

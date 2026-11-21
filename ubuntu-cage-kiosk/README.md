@@ -26,15 +26,28 @@ For the hardware it has been run on, see [EXAMPLE-SETUP.md](EXAMPLE-SETUP.md).
 Start from a fresh Ubuntu 24.04 LTS Desktop install with `openssh-server` installed, so you
 can manage the machine remotely.
 
+Copy this whole directory to the machine (the installer uses the files under `rootfs/`),
+then run the installer:
+
 ```sh
-scp install-kiosk.sh <machine>:
+scp -r ubuntu-cage-kiosk <machine>:
 ssh <machine>
-sudo ./install-kiosk.sh 'http://<server>:<port>/<path>'
+sudo ./ubuntu-cage-kiosk/install-kiosk.sh 'http://<server>:<port>/<path>'
 sudo reboot
 ```
 
+Or `git clone` this repository on the machine instead of copying.
+
 Quote the URL: query strings contain `&`. Re-running the script is safe; re-running with a
 new URL replaces it.
+
+## Files
+
+`rootfs/` holds every file the installer puts on the system, at the same path it gets there
+(`rootfs/usr/local/bin/kiosk-browser` becomes `/usr/local/bin/kiosk-browser`). Files ending
+in `.in` are templates: the installer fills in `@KIOSK_USER@` and `@LID_SWITCH_ACTION@` and
+drops the `.in`. `etc/default/kiosk` is only installed when it doesn't exist yet, so
+re-running keeps your settings.
 
 If the page needs a sign-in, sign in once on the machine itself. Chrome keeps cookies and
 sessions in `~kiosk/.config/kiosk-chrome`, so they survive restarts and reboots. On a

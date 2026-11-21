@@ -1,0 +1,6 @@
+[Unit]
+Description=Daily kiosk browser restart
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/systemctl restart kiosk.service

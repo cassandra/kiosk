@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# kiosk-brightness [auto|day|night|<percent>] [--force]
+#   auto: pick day/night level from the schedule in /etc/default/kiosk.
+#   Only touches the hardware when the target level changes (so a manual
+#   adjustment sticks until the next day/night transition), unless --force.
+set -eu
+# shellcheck disable=SC1091
+. /etc/default/kiosk
+
+mode="${1:-auto}"; force="${2:-}"
+now=$((10#$(date +%H%M)))
+day=$((10#$DAY_START)); night=$((10#$NIGHT_START))
+
+case "$mode" in
+    auto)  if [ "$now" -ge "$day" ] && [ "$now" -lt "$night" ]; then pct=$DAY_BRIGHTNESS
+           else pct=$NIGHT_BRIGHTNESS; fi ;;
+    day)   pct=$DAY_BRIGHTNESS ;;
+    night) pct=$NIGHT_BRIGHTNESS ;;
+    *[!0-9]*|'') echo "usage: $0 [auto|day|night|<percent>] [--force]" >&2; exit 2 ;;
+    *)     pct=$mode ;;
+esac
+[ "$pct" -lt 1 ] && pct=1
+[ "$pct" -gt 100 ] && pct=100
+
+state=/run/kiosk-brightness
+if [ "$mode" = auto ] && [ "$force" != --force ] && [ "$(cat "$state" 2>/dev/null)" = "$pct" ]; then
+    exit 0
+fi
+
+bl=""
+if [ -n "${BACKLIGHT_DEVICE:-}" ]; then
+    bl="/sys/class/backlight/$BACKLIGHT_DEVICE"
+elif [ -d /sys/class/backlight/intel_backlight ]; then
+    bl=/sys/class/backlight/intel_backlight
+else
+    bl=$(find /sys/class/backlight -mindepth 1 -maxdepth 1 2>/dev/null | head -n1)
+fi
+
+if [ -n "$bl" ] && [ -w "$bl/brightness" ]; then
+    max=$(cat "$bl/max_brightness")
+    raw=$(( max * pct / 100 )); [ "$raw" -lt 1 ] && raw=1
+    echo "$raw" > "$bl/brightness"
+    echo "backlight $(basename "$bl") -> ${pct}% ($raw/$max)"
+else
+    ddcutil setvcp 10 "$pct"
+    echo "DDC/CI monitor -> ${pct}%"
+fi
+echo "$pct" > "$state"

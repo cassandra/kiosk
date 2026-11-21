@@ -1,0 +1,6 @@
+[Login]
+HandleLidSwitch=@LID_SWITCH_ACTION@
+HandleLidSwitchExternalPower=@LID_SWITCH_ACTION@
+# Lid closed with an external monitor attached: keep running on that monitor.
+HandleLidSwitchDocked=ignore
+IdleAction=ignore

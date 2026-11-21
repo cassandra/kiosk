@@ -1,0 +1,6 @@
+[Unit]
+Description=Apply kiosk day/night brightness
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/kiosk-brightness auto
