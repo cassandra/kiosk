@@ -1,0 +1,7 @@
+-- Installed by install-kiosk.sh when AUDIO_PROFILE is set (WirePlumber 0.4).
+-- Prefer this profile on every sound card that has it. A profile chosen by hand
+-- (pactl set-card-profile) is remembered per user and still takes precedence.
+table.insert(alsa_monitor.rules, {
+  matches = { { { "device.name", "matches", "alsa_card.*" } } },
+  apply_properties = { ["device.profile"] = "@AUDIO_PROFILE@" },
+})

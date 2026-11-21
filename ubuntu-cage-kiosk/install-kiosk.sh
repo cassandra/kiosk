@@ -16,8 +16,8 @@
 #   - Keyboard volume/mute keys work (triggerhappy -> kiosk-volume).
 #
 # The files it installs are under rootfs/, at the same paths they get on the
-# system. Files ending in .in are templates: @KIOSK_USER@, @LID_SWITCH_ACTION@
-# and @RESTART_TIME@ are filled in, and the .in suffix is dropped.
+# system. Files ending in .in are templates: @KIOSK_USER@, @LID_SWITCH_ACTION@,
+# @RESTART_TIME@ and @AUDIO_PROFILE@ are filled in, and the .in suffix is dropped.
 #
 # Usage:   sudo ./install-kiosk.sh [--config <file>] [<url>]
 #   <url>            the page to show; overrides KIOSK_URL from any config file.
@@ -48,6 +48,7 @@ install_template() {
     sed -e "s|@KIOSK_USER@|$KIOSK_USER|g" \
         -e "s|@LID_SWITCH_ACTION@|$LID_SWITCH_ACTION|g" \
         -e "s|@RESTART_TIME@|$RESTART_TIME|g" \
+        -e "s|@AUDIO_PROFILE@|$AUDIO_PROFILE|g" \
         "$ROOTFS/$2.in" > "/$2"
     chmod "$1" "/$2"
 }
@@ -182,6 +183,10 @@ if [ -n "$RESTART_TIME" ]; then
     RESTART_TIME="${RESTART_TIME:0:2}:${RESTART_TIME:2:2}"
 fi
 
+AUDIO_PROFILE=$(config_get "$CONFIG" AUDIO_PROFILE)
+[[ $AUDIO_PROFILE =~ ^[A-Za-z0-9:+_.-]*$ ]] \
+    || die "AUDIO_PROFILE has unexpected characters (got '$AUDIO_PROFILE')"
+
 AUTO_UPDATE_CHROME=$(config_get "$CONFIG" AUTO_UPDATE_CHROME)
 case "$AUTO_UPDATE_CHROME" in
     yes|no) ;;
@@ -220,6 +225,17 @@ install_file 644 etc/triggerhappy/triggers.d/kiosk-volume.conf
 # Run triggerhappy's commands as the kiosk user (owner of the PipeWire session)
 # instead of the packaged default 'nobody'.
 install_template 644 etc/systemd/system/triggerhappy.service.d/kiosk.conf
+
+# Sound card profile. The rule format is WirePlumber 0.4's (Ubuntu 24.04).
+if [ -n "$AUDIO_PROFILE" ]; then
+    case "$(dpkg-query -W -f='${Version}' wireplumber 2>/dev/null)" in
+        0.4.*) install_template 644 etc/wireplumber/main.lua.d/51-kiosk-audio.lua
+               echo "sound card profile -> $AUDIO_PROFILE" ;;
+        *)     echo "WARNING: AUDIO_PROFILE needs WirePlumber 0.4; not applied" >&2 ;;
+    esac
+else
+    rm -f /etc/wireplumber/main.lua.d/51-kiosk-audio.lua
+fi
 
 # ---------------------------------------------------------------------------
 step "Installing systemd units"

@@ -172,19 +172,22 @@ shows only "Dummy Output".
 "Analog Stereo" sink, the sound card is in an analog-only *profile*. WirePlumber picks the
 highest-priority available profile, and analog usually ranks above HDMI. On a machine with
 a built-in speaker (common on small desktops), analog is always "available", so it wins.
-Switch the card to its HDMI profile once:
+Find the profile the monitor needs, then set it as `AUDIO_PROFILE`:
 
 ```sh
 KU=$(id -u kiosk)
 sudo -u kiosk XDG_RUNTIME_DIR=/run/user/$KU pactl list cards | grep -E 'Name:|output:|Active Profile'
-# pick the hdmi profile with "available: yes" (the port the monitor is on), then:
-sudo -u kiosk XDG_RUNTIME_DIR=/run/user/$KU pactl set-card-profile <card-name> output:hdmi-stereo
+# pick the hdmi profile with "available: yes" (the port the monitor is on), e.g. output:hdmi-stereo
+sudoedit /etc/default/kiosk                # AUDIO_PROFILE='output:hdmi-stereo'
+sudo ~/kiosk/install-kiosk.sh && sudo reboot
 sudo kiosk-volume 100                      # then set loudness with the monitor's own buttons
 ```
 
-WirePlumber remembers the choice for the kiosk user across reboots. If it ever reverts
-(rebuild, or `~kiosk/.local/state/wireplumber` cleared), repeat this; a WirePlumber rule
-disabling the analog output would make it permanent if needed.
+The setting installs a WirePlumber rule, so the profile is chosen again after a rebuild.
+A profile chosen by hand (`pactl set-card-profile`) is remembered for the kiosk user and
+takes precedence over the setting until `~kiosk/.local/state/wireplumber` is cleared. To try
+a profile right away without reinstalling:
+`sudo -u kiosk XDG_RUNTIME_DIR=/run/user/$KU pactl set-card-profile <card-name> <profile>`.
 
 ## Testing touch
 

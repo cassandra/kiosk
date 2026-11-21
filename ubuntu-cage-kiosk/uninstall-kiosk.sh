@@ -34,6 +34,8 @@ KIOSK_DIRS=(
     /etc/opt/chrome/policies
     /etc/opt/chrome
     /usr/local/share/kiosk
+    /etc/wireplumber/main.lua.d
+    /etc/wireplumber
 )
 
 die() { echo "ERROR: $*" >&2; exit 1; }

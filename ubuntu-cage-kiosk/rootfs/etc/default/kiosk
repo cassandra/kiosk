@@ -47,6 +47,12 @@ RESTART_DAILY='yes'
 # The new version runs after the next restart. 'no' = update Chrome yourself.
 AUTO_UPDATE_CHROME='yes'
 
+# [install] Sound card profile, e.g. 'output:hdmi-stereo' for sound out of an
+# HDMI/DP monitor (README: "Sound out of a monitor's speakers" lists them).
+# Blank = WirePlumber's automatic choice. A profile chosen by hand with pactl
+# takes precedence until ~kiosk/.local/state/wireplumber is cleared.
+AUDIO_PROFILE=''
+
 # [restart] Extra Chrome flags, space separated (e.g. '--force-device-scale-factor=1.25').
 EXTRA_CHROME_FLAGS=''
 
