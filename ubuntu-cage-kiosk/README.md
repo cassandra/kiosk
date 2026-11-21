@@ -28,20 +28,28 @@ For the hardware it has been run on, see [EXAMPLE-SETUP.md](EXAMPLE-SETUP.md).
 Start from a fresh Ubuntu 24.04 LTS Desktop install with `openssh-server` installed, so you
 can manage the machine remotely.
 
-Copy this whole directory to the machine (the installer uses the files under `rootfs/`),
-then run the installer:
+Clone this repository on the machine and run the installer:
 
 ```sh
-scp -r ubuntu-cage-kiosk <machine>:
 ssh <machine>
-sudo ./ubuntu-cage-kiosk/install-kiosk.sh 'http://<server>:<port>/<path>'
+sudo apt install git                       # not part of a default Ubuntu Desktop install
+git clone https://github.com/cassandra/kiosk.git
+sudo ./kiosk/ubuntu-cage-kiosk/install-kiosk.sh 'http://<server>:<port>/<path>'
 sudo reboot
 ```
 
-Or `git clone` this repository on the machine instead of copying.
-
 Quote the URL: query strings contain `&`. Re-running the script is safe, and keeps the
 existing settings unless you override them (see "Settings").
+
+To update later:
+
+```sh
+cd kiosk && git pull
+sudo ./ubuntu-cage-kiosk/install-kiosk.sh && sudo reboot
+```
+
+The installer needs the whole directory (it installs the files under `rootfs/`), so if you
+copy it rather than clone it, copy all of `ubuntu-cage-kiosk/`.
 
 If the page needs a sign-in, sign in once on the machine itself. Chrome keeps cookies and
 sessions in `~kiosk/.config/kiosk-chrome`, so they survive restarts and reboots. On a
@@ -52,12 +60,14 @@ you plug in a USB keyboard for this step.
 
 All settings live in `/etc/default/kiosk`. The defaults, with a comment for each setting, are
 in [`rootfs/etc/default/kiosk`](rootfs/etc/default/kiosk). Each setting is marked with when a
-change takes effect: `[restart]` (restart the kiosk), `[timer]` (within 5 minutes) or
-`[install]` (re-run the installer).
+change takes effect: `[restart]` (restart the kiosk), `[timer]` (the next time its timer
+runs) or `[install]` (re-run the installer).
 
-To choose settings at install time, copy the defaults file, edit it, and pass it in:
+To choose settings at install time, copy the defaults file, edit it, and pass it in (from
+`kiosk/ubuntu-cage-kiosk`):
 
 ```sh
+mkdir -p local
 cp rootfs/etc/default/kiosk local/<machine>.conf      # local/ is git-ignored
 # edit local/<machine>.conf, including KIOSK_URL
 sudo ./install-kiosk.sh --config local/<machine>.conf
@@ -73,7 +83,7 @@ with their defaults. It warns about settings it doesn't recognize, such as typos
 
 `rootfs/` holds every file the installer puts on the system, at the same path it gets there
 (`rootfs/usr/local/bin/kiosk-browser` becomes `/usr/local/bin/kiosk-browser`). Files ending
-in `.in` are templates: the installer fills in `@KIOSK_USER@` and `@LID_SWITCH_ACTION@` and
+in `.in` are templates: the installer fills in placeholders such as `@KIOSK_USER@` and
 drops the `.in`. `etc/default/kiosk` is the settings template described above.
 
 ## Verify
@@ -201,10 +211,8 @@ or gesture handling. Use it to tell browser or hardware touch problems apart fro
 app's own touch handling.
 
 ```sh
-# from your workstation
-scp touch-test.html <machine>:
 # on the kiosk: show the test page instead of the normal URL
-sudo install -D -m 644 ~/touch-test.html /usr/local/share/kiosk/touch-test.html
+sudo install -D -m 644 ~/kiosk/ubuntu-cage-kiosk/touch-test.html /usr/local/share/kiosk/touch-test.html
 sudo cp /etc/default/kiosk /etc/default/kiosk.bak
 sudo sed -i "s|^KIOSK_URL=.*|KIOSK_URL='file:///usr/local/share/kiosk/touch-test.html'|" /etc/default/kiosk
 sudo systemctl restart kiosk
@@ -220,6 +228,7 @@ Which device is the touchscreen: `sudo libinput list-devices | grep -E '^Device|
 ## Reverting to the normal desktop
 
 ```sh
+cd ~/kiosk/ubuntu-cage-kiosk
 sudo ./uninstall-kiosk.sh            # back to the desktop; keeps the kiosk user, settings, packages
 sudo ./uninstall-kiosk.sh --purge    # also removes those: as if never installed
 sudo reboot
