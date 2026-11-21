@@ -5,6 +5,22 @@ set -u
 . /etc/default/kiosk
 
 DATA="$HOME/.config/kiosk-chrome"
+# Chrome opens the start page, which waits for the server and then loads
+# KIOSK_URL. kiosk-watchdog builds the same URL.
+START_PAGE=file:///usr/local/share/kiosk/start.html
+
+# urlencode <string>: percent-encode everything but unreserved characters.
+urlencode() {
+    local LC_ALL=C s=$1 out='' c i
+    for (( i = 0; i < ${#s}; i++ )); do
+        c=${s:i:1}
+        case "$c" in
+            [a-zA-Z0-9.~_-]) out+=$c ;;
+            *) out+=$(printf '%%%02X' "'$c") ;;
+        esac
+    done
+    printf '%s' "$out"
+}
 PREFS="$DATA/Default/Preferences"
 
 # After a power loss/crash, Chrome would show a "Restore pages?" bubble.
@@ -12,6 +28,12 @@ PREFS="$DATA/Default/Preferences"
 if [ -f "$PREFS" ]; then
     sed -i -e 's/"exited_cleanly":false/"exited_cleanly":true/' \
            -e 's/"exit_type":"[^"]*"/"exit_type":"Normal"/' "$PREFS"
+fi
+
+# DevTools port for kiosk-watchdog. Chrome binds it to 127.0.0.1 only.
+WATCHDOG_FLAGS=()
+if [ -n "${WATCHDOG_PORT:-}" ]; then
+    WATCHDOG_FLAGS=(--remote-debugging-port="$WATCHDOG_PORT")
 fi
 
 # shellcheck disable=SC2086  # EXTRA_CHROME_FLAGS is intentionally word-split
@@ -30,5 +52,6 @@ exec /usr/bin/google-chrome-stable \
     --overscroll-history-navigation=0 \
     --disable-pinch \
     --disable-features=Translate,TouchpadOverscrollHistoryNavigation \
+    "${WATCHDOG_FLAGS[@]}" \
     ${EXTRA_CHROME_FLAGS:-} \
-    "$KIOSK_URL"
+    "$START_PAGE?url=$(urlencode "$KIOSK_URL")"

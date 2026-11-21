@@ -33,6 +33,7 @@ KIOSK_DIRS=(
     /etc/opt/chrome/policies/managed
     /etc/opt/chrome/policies
     /etc/opt/chrome
+    /usr/local/share/kiosk
 )
 
 die() { echo "ERROR: $*" >&2; exit 1; }
@@ -49,7 +50,7 @@ esac
 
 # ---------------------------------------------------------------------------
 step "Stopping the kiosk"
-systemctl disable --now kiosk.service kiosk-brightness.timer kiosk-restart.timer 2>/dev/null || true
+systemctl disable --now kiosk.service kiosk-watchdog.service kiosk-brightness.timer kiosk-restart.timer 2>/dev/null || true
 
 # ---------------------------------------------------------------------------
 step "Removing installed files"

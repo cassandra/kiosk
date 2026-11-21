@@ -8,6 +8,8 @@
 #   - Google Chrome in --kiosk mode with audio autoplay allowed.
 #   - Never idle-sleeps; laptops suspend on lid close (configurable).
 #   - Restarts Chrome if it exits.
+#   - Waits for the server at start, and recovers from a page that failed to
+#     load during a server outage (start page + kiosk-watchdog).
 #   - Scheduled day/night brightness (laptop backlight or DDC/CI monitor).
 #   - Daily 04:30 browser restart (clears leaks, picks up Chrome updates).
 #   - Keyboard volume/mute keys work (triggerhappy -> kiosk-volume).
@@ -129,7 +131,7 @@ step "Installing packages (cage, ddcutil, Google Chrome, triggerhappy)"
 add-apt-repository -y universe >/dev/null 2>&1 || true
 apt-get update
 # pulseaudio-utils: pactl, used by the README's audio steps.
-apt-get install -y cage ddcutil curl \
+apt-get install -y cage ddcutil curl python3 \
     triggerhappy pipewire-bin sound-theme-freedesktop pulseaudio-utils
 if ! command -v google-chrome-stable >/dev/null 2>&1; then
     tmp=$(mktemp -d); chmod 755 "$tmp"
@@ -171,8 +173,10 @@ case "$LID_SWITCH_ACTION" in
 esac
 
 # ---------------------------------------------------------------------------
-step "Installing the browser launcher and Chrome policy"
+step "Installing the browser launcher, start page, watchdog and Chrome policy"
 install_file 755 usr/local/bin/kiosk-browser
+install_file 644 usr/local/share/kiosk/start.html
+install_file 755 usr/local/bin/kiosk-watchdog
 # Policy: belt-and-suspenders for autoplay, and quiet the prompts.
 install_file 644 etc/opt/chrome/policies/managed/kiosk.json
 
@@ -198,6 +202,7 @@ step "Installing systemd units"
 # PAM stack for kiosk.service: gives the kiosk user a real logind session.
 install_file 644 etc/pam.d/kiosk
 install_template 644 etc/systemd/system/kiosk.service
+install_template 644 etc/systemd/system/kiosk-watchdog.service
 install_file 644 etc/systemd/system/kiosk-brightness.service
 install_file 644 etc/systemd/system/kiosk-brightness.timer
 install_file 644 etc/systemd/system/kiosk-restart.service
@@ -230,6 +235,7 @@ fi
 systemctl daemon-reload
 systemctl set-default multi-user.target
 systemctl reenable kiosk.service                          # drops old graphical.target link
+systemctl enable kiosk-watchdog.service                   # runs alongside kiosk.service
 systemctl enable kiosk-brightness.timer kiosk-restart.timer
 systemctl enable triggerhappy.service >/dev/null 2>&1 || true
 systemctl restart triggerhappy.service

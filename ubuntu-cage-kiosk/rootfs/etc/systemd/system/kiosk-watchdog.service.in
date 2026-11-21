@@ -1,0 +1,15 @@
+[Unit]
+Description=Kiosk watchdog: reload the page after a server outage
+After=kiosk.service
+# Started, stopped and restarted with the kiosk.
+PartOf=kiosk.service
+
+[Service]
+Type=simple
+User=@KIOSK_USER@
+ExecStart=/usr/local/bin/kiosk-watchdog
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=kiosk.service

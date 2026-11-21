@@ -1,0 +1,225 @@
+#!/usr/bin/python3 -I
+"""
+kiosk-watchdog: recover the kiosk page after a server outage, without anyone
+having to log in.
+
+If the server is unreachable when the browser loads a page (someone taps a link
+during an outage, or the browser restarts during one), the browser shows its own
+error page, and the web app's code is gone. A reverse proxy in front of a
+restarting app can likewise leave a 502/503/504 page. Nothing on such a page
+will ever retry.
+
+Every few seconds this asks Chrome (over its local DevTools port) what document
+the tab shows. If it is the browser's error page or a 502/503/504 response, it
+sends the browser to the kiosk start page, which waits for the server and then
+loads KIOSK_URL. Pages that loaded normally are never touched, including ones
+showing the web app's own "server unreachable" message.
+
+Settings (from /etc/default/kiosk): KIOSK_URL, WATCHDOG_PORT (blank = off).
+Run by kiosk-watchdog.service as the kiosk user. Uses only the standard library.
+"""
+
+import base64
+import json
+import os
+import socket
+import struct
+import subprocess
+import sys
+import time
+import urllib.parse
+import urllib.request
+
+CONFIG = '/etc/default/kiosk'
+# Same start page as kiosk-browser.
+START_PAGE = 'file:///usr/local/share/kiosk/start.html'
+CHECK_INTERVAL_SECS = 10
+HTTP_TIMEOUT_SECS = 5
+# Responses meaning "the server is there but the app isn't (yet)".
+GATEWAY_ERROR_STATUSES = {502, 503, 504}
+
+# The main document's HTTP status (0 if unknown).
+RESPONSE_STATUS_JS = "(performance.getEntriesByType('navigation')[0] || {}).responseStatus || 0"
+
+
+def log(message):
+    print(message, flush=True)
+
+
+def read_settings():
+    """Return (KIOSK_URL, WATCHDOG_PORT), read the way the kiosk scripts read them."""
+    out = subprocess.run(
+        ['bash', '-c', f'. {CONFIG}; printf "%s\\0%s" "${{KIOSK_URL:-}}" "${{WATCHDOG_PORT:-}}"'],
+        check=True, capture_output=True, text=True,
+    ).stdout
+    url, port = out.split('\0')
+    return url, port
+
+
+class DevTools:
+    """
+    Minimal Chrome DevTools Protocol client for the kiosk's page, over one
+    websocket connection. Use as a context manager.
+    """
+
+    def __init__(self, port):
+        self.port = port
+        self.sock = None
+        self.next_id = 0
+
+    def __enter__(self):
+        ws_url = urllib.parse.urlsplit(self._page_websocket_url())
+        self.sock = socket.create_connection((ws_url.hostname, ws_url.port), timeout=HTTP_TIMEOUT_SECS)
+        try:
+            self._handshake(self.sock, ws_url)
+        except BaseException:
+            self.sock.close()
+            raise
+        return self
+
+    def __exit__(self, *exc):
+        self.sock.close()
+
+    def _page_websocket_url(self):
+        with urllib.request.urlopen(f'http://127.0.0.1:{self.port}/json', timeout=HTTP_TIMEOUT_SECS) as r:
+            targets = json.load(r)
+        for target in targets:
+            if target.get('type') == 'page':
+                return target['webSocketDebuggerUrl']
+        raise ConnectionError('no page target')
+
+    def call(self, method, params=None):
+        self.next_id += 1
+        self._send_text(self.sock, json.dumps({'id': self.next_id, 'method': method, 'params': params or {}}))
+        while True:
+            message = json.loads(self._receive_text(self.sock))
+            if message.get('id') == self.next_id:
+                if 'error' in message:
+                    raise ConnectionError(f"{method}: {message['error']}")
+                return message['result']
+
+    @staticmethod
+    def _handshake(sock, ws_url):
+        key = base64.b64encode(os.urandom(16)).decode()
+        sock.sendall((
+            f'GET {ws_url.path} HTTP/1.1\r\n'
+            f'Host: {ws_url.netloc}\r\n'
+            'Upgrade: websocket\r\n'
+            'Connection: Upgrade\r\n'
+            f'Sec-WebSocket-Key: {key}\r\n'
+            'Sec-WebSocket-Version: 13\r\n\r\n'
+        ).encode())
+        response = b''
+        while b'\r\n\r\n' not in response:
+            chunk = sock.recv(1024)
+            if not chunk:
+                raise ConnectionError('websocket handshake: connection closed')
+            response += chunk
+        if not response.startswith(b'HTTP/1.1 101'):
+            raise ConnectionError(f'websocket handshake: {response.splitlines()[0]!r}')
+
+    @staticmethod
+    def _send_text(sock, text):
+        # Client frames must be masked (RFC 6455).
+        payload = text.encode()
+        header = bytes([0x81])  # FIN + text frame
+        if len(payload) < 126:
+            header += bytes([0x80 | len(payload)])
+        elif len(payload) < 1 << 16:
+            header += bytes([0x80 | 126]) + struct.pack('!H', len(payload))
+        else:
+            header += bytes([0x80 | 127]) + struct.pack('!Q', len(payload))
+        mask = os.urandom(4)
+        sock.sendall(header + mask + bytes(b ^ mask[i % 4] for i, b in enumerate(payload)))
+
+    @staticmethod
+    def _receive_exact(sock, size):
+        data = b''
+        while len(data) < size:
+            chunk = sock.recv(size - len(data))
+            if not chunk:
+                raise ConnectionError('websocket closed')
+            data += chunk
+        return data
+
+    def _receive_text(self, sock):
+        """Return the next complete text message (reassembling fragments)."""
+        message = b''
+        while True:
+            first, second = self._receive_exact(sock, 2)
+            opcode, length = first & 0x0F, second & 0x7F
+            if length == 126:
+                length = struct.unpack('!H', self._receive_exact(sock, 2))[0]
+            elif length == 127:
+                length = struct.unpack('!Q', self._receive_exact(sock, 8))[0]
+            payload = self._receive_exact(sock, length)  # server frames are unmasked
+            if opcode == 0x8:
+                raise ConnectionError('websocket closed by browser')
+            if opcode in (0x1, 0x0):
+                message += payload
+                if first & 0x80:  # FIN
+                    return message.decode()
+            # Ignore ping/pong and binary frames.
+
+    def page_state(self):
+        """
+        Return {'url', 'failed', 'status'} for the page's main frame. 'failed'
+        means the browser is showing its own error page. The frame tree says
+        this without running any script; the HTTP status needs a script, which
+        may not run on an error page, so it falls back to 0.
+        """
+        frame = self.call('Page.getFrameTree')['frameTree']['frame']
+        url = frame.get('url', '')
+        failed = 'unreachableUrl' in frame or url.startswith('chrome-error://')
+        try:
+            result = self.call('Runtime.evaluate', {'expression': RESPONSE_STATUS_JS, 'returnByValue': True})
+            status = int(result['result'].get('value') or 0)
+        except (ConnectionError, ValueError, KeyError):
+            status = 0
+        return {'url': frame.get('unreachableUrl', url), 'failed': failed, 'status': status}
+
+    def navigate(self, url):
+        self.call('Page.navigate', {'url': url})
+
+
+def is_broken(state):
+    return state['failed'] or state['status'] in GATEWAY_ERROR_STATUSES
+
+
+def start_page_url(kiosk_url):
+    return f"{START_PAGE}?url={urllib.parse.quote(kiosk_url, safe='')}"
+
+
+def main():
+    last_status = None  # log only when this changes
+
+    def report(status):
+        nonlocal last_status
+        if status != last_status:
+            log(status)
+            last_status = status
+
+    while True:
+        time.sleep(CHECK_INTERVAL_SECS)
+        kiosk_url, port = read_settings()
+        if not port or not kiosk_url:
+            report('watchdog off (WATCHDOG_PORT or KIOSK_URL blank)')
+            continue
+        try:
+            with DevTools(port) as devtools:
+                state = devtools.page_state()
+                if not is_broken(state):
+                    report('page ok')
+                    continue
+                log(f"page failed to load ({state['url']}, status {state['status']}); going to the start page")
+                devtools.navigate(start_page_url(kiosk_url))
+                last_status = None
+        except (OSError, ValueError, KeyError) as e:
+            report(f'browser not reachable on port {port}: {e}')
+
+
+if __name__ == '__main__':
+    try:
+        main()
+    except KeyboardInterrupt:
+        sys.exit(0)

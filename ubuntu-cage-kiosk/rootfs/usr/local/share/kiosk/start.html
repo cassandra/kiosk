@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<!--
+  start.html: the kiosk's first page, and where kiosk-watchdog sends the browser
+  when a page failed to load. Opened as start.html?url=<KIOSK_URL>.
+
+  Checks every few seconds whether the server answers, then loads the URL.
+  START loads it right away. A local file can only tell whether the server
+  answers at all, not with what status: if it answers with an error page
+  (e.g. 502 while an app behind a proxy starts), kiosk-watchdog sends the
+  browser back here and the wait continues.
+-->
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kiosk</title>
+<style>
+  html, body { height: 100%; margin: 0; }
+  body { display: flex; flex-direction: column; align-items: center; justify-content: center;
+         gap: 1.5rem; background: #1e1e1e; color: #ddd; font: 1.5rem sans-serif;
+         text-align: center; padding: 1rem; box-sizing: border-box; }
+  #status { font-size: 2rem; }
+  #detail { color: #999; font-size: 1.1rem; line-height: 1.6; word-break: break-all; }
+  button  { font-size: 2rem; padding: 0.6em 2.4em; border-radius: 0.4em; border: none;
+            background: #2d6a9f; color: #fff; }
+  button:active { background: #3c8cd0; }
+</style>
+</head>
+<body>
+<div id="status">Starting…</div>
+<button id="start">START</button>
+<div id="detail"></div>
+<script>
+  const CHECK_INTERVAL_MS = 5000;
+  const CHECK_TIMEOUT_MS = 4000;
+
+  const target = new URLSearchParams(location.search).get('url') || '';
+  const statusEl = document.getElementById('status');
+  const detailEl = document.getElementById('detail');
+  const waitingSince = new Date();
+  let attempts = 0;
+
+  function go() {
+    location.replace(target);
+  }
+
+  function showDetail(lastError) {
+    const lines = [
+      target,
+      `Waiting since ${waitingSince.toLocaleTimeString()} (${attempts} checks)`,
+    ];
+    if (lastError) lines.push(`Last result: ${lastError}`);
+    detailEl.textContent = '';
+    for (const line of lines) {
+      detailEl.append(line, document.createElement('br'));
+    }
+  }
+
+  // True if the server answers at all. The response is opaque (cross-origin,
+  // no-cors), so its status can't be read.
+  async function serverAnswers() {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), CHECK_TIMEOUT_MS);
+    try {
+      await fetch(new URL(target).origin + '/', {
+        mode: 'no-cors', cache: 'no-store', signal: controller.signal,
+      });
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: controller.signal.aborted ? 'no answer (timed out)' : 'not reachable' };
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  async function check() {
+    attempts++;
+    const result = await serverAnswers();
+    if (result.ok) {
+      statusEl.textContent = 'Server found. Loading…';
+      go();
+      return;
+    }
+    statusEl.textContent = 'Waiting for the server…';
+    showDetail(result.error);
+    setTimeout(check, CHECK_INTERVAL_MS);
+  }
+
+  document.getElementById('start').addEventListener('click', go);
+
+  if (!target) {
+    statusEl.textContent = 'No page configured (KIOSK_URL is blank).';
+    document.getElementById('start').hidden = true;
+  } else if (!/^https?:/i.test(target)) {
+    go();  // Local or other non-web URLs: nothing to wait for.
+  } else {
+    check();
+  }
+</script>
+</body>
+</html>

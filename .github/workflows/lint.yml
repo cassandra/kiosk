@@ -1,0 +1,22 @@
+name: lint
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: shellcheck
+        # ubuntu-latest ships shellcheck. Checks the install/uninstall scripts and
+        # the bash scripts they install (including .in templates).
+        run: |
+          { find . -name '*-kiosk.sh'
+            grep -rl '^#!.*bash' $(find . -path '*/rootfs/usr/local/bin' -type d)
+          } | sort -u | xargs -r shellcheck -s bash
+      - name: Python syntax
+        run: |
+          grep -rl '^#!.*python' $(find . -path '*/rootfs/usr/local/bin' -type d) \
+            | xargs -r -n1 python3 -m py_compile

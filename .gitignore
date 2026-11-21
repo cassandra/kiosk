@@ -5,4 +5,7 @@ NOTES
 *~
 
 # Per-machine kiosk settings (install-kiosk.sh --config)
-local/
+/*/local/
+
+# Python bytecode
+__pycache__/

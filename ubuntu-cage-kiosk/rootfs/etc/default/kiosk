@@ -13,6 +13,12 @@
 # [restart] The page to show. Quote it: URLs with a query string contain '&'.
 KIOSK_URL=''
 
+# [restart] Server-down recovery (kiosk-watchdog): when the browser shows its own
+# error page, or a 502/503/504 page, because the server was unreachable, reload
+# KIOSK_URL as soon as the server responds again. This is the local DevTools port
+# it uses (reachable only from this machine). Blank = no watchdog.
+WATCHDOG_PORT='9222'
+
 # [timer] Brightness schedule (24h HHMM) and levels (percent, 1-100).
 DAY_START='0630'
 NIGHT_START='2355'

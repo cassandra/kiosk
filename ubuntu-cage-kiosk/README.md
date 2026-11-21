@@ -14,6 +14,7 @@ For the hardware it has been run on, see [EXAMPLE-SETUP.md](EXAMPLE-SETUP.md).
 | `kiosk.service` | Starts **cage** (a compositor that runs one app full-screen) on tty1 at boot, running Chrome; restarts it if it exits. |
 | Boot target `multi-user.target` | Boots to text mode so the GNOME login screen (GDM) never starts. GDM stays installed and untouched. |
 | `/usr/local/bin/kiosk-browser` | Chrome `--kiosk` with autoplay allowed, no first-run or translate prompts, no "Restore pages?" after power loss, no swipe-back or pinch-zoom |
+| Start page + `kiosk-watchdog.service` | Server-down recovery; see "When the server is down" below |
 | `/etc/opt/chrome/policies/managed/kiosk.json` | Chrome policy `AutoplayAllowed` (backup in case the flag ever stops working) |
 | `/etc/default/kiosk` | **Settings**: URL, day/night times and brightness, extra Chrome flags, lid action (see "Settings") |
 | `kiosk-brightness` + timer | Every 5 min, applies the day/night level. Laptop: sysfs backlight. External monitor: `ddcutil` (DDC/CI). A manual change sticks until the next day/night switch. |
@@ -91,6 +92,32 @@ After installing, check the things a kiosk is for:
    To confirm it really suspended:
    `journalctl -b --no-pager | grep -E "Lid (closed|opened)|PM: suspend (entry|exit)" | tail`
 
+## When the server is down
+
+A web app can handle an outage itself while its page stays loaded (many keep polling and
+show a message). What it can't recover from is a page that failed to load: if the server is
+unreachable when the browser loads a page (someone taps a link during an outage, or the
+browser starts during one), the browser shows its own error page and the app's code is gone.
+Two pieces recover from this without anyone logging in:
+
+- **Start page** (`/usr/local/share/kiosk/start.html`): Chrome always starts here, not at
+  `KIOSK_URL` directly. It checks every 5 seconds whether the server answers, then loads
+  `KIOSK_URL`. It shows what it is waiting for and since when; **START** loads the page
+  right away.
+- **`kiosk-watchdog`**: every 10 seconds, asks Chrome what the tab shows. If it is the
+  browser's error page, or a 502/503/504 page (e.g. a proxy in front of an app that is
+  still starting), it sends the browser to the start page. Pages that loaded normally are
+  never touched, including ones showing the app's own outage message.
+
+The watchdog talks to Chrome through its DevTools port (`WATCHDOG_PORT`, default 9222),
+which Chrome only opens on 127.0.0.1: other machines can't reach it, but any program on
+the kiosk itself can control the browser through it. Set `WATCHDOG_PORT=''` to turn the
+watchdog off. Its log: `journalctl -u kiosk-watchdog -b`.
+
+The start page can only tell whether the server answers, not with what status. If it
+answers with an error page while the app is starting, the browser goes back and forth
+between that page and the start page every 10-15 seconds until the app is ready.
+
 ## Day-to-day
 
 ```sh
@@ -99,6 +126,7 @@ sudo systemctl restart kiosk               # reload: restarts Chrome on KIOSK_UR
 sudo kiosk-brightness auto --force         # re-apply brightness now
 sudo kiosk-brightness 40                   # one-off level (sticks until next day/night switch)
 journalctl -u kiosk -b                     # browser/cage logs
+journalctl -u kiosk-watchdog -b            # server-down recovery
 ```
 
 `sudo systemctl restart kiosk` is also the way out if the page ever reaches a dead end with
