@@ -198,7 +198,7 @@ KU=$(id -u kiosk)
 sudo -u kiosk XDG_RUNTIME_DIR=/run/user/$KU pactl list cards | grep -E 'Name:|output:|Active Profile'
 # pick the hdmi profile with "available: yes" (the port the monitor is on), e.g. output:hdmi-stereo
 sudoedit /etc/default/kiosk                # AUDIO_PROFILE='output:hdmi-stereo'
-sudo ~/kiosk/install-kiosk.sh && sudo reboot
+sudo ~/kiosk/ubuntu-cage-kiosk/install-kiosk.sh && sudo reboot
 sudo kiosk-volume 100                      # then set loudness with the monitor's own buttons
 ```
 
