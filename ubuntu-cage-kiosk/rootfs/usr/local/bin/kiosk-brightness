@@ -3,6 +3,8 @@
 #   auto: pick day/night level from the schedule in /etc/default/kiosk.
 #   Only touches the hardware when the target level changes (so a manual
 #   adjustment sticks until the next day/night transition), unless --force.
+#   Does nothing when DIMMING='no'. If the screen has no brightness control,
+#   auto says so once and then stays quiet until a reboot or --force.
 set -eu
 # shellcheck disable=SC1091
 . /etc/default/kiosk
@@ -23,9 +25,13 @@ esac
 [ "$pct" -gt 100 ] && pct=100
 
 state=/run/kiosk-brightness
-if [ "$mode" = auto ] && [ "$force" != --force ] && [ "$(cat "$state" 2>/dev/null)" = "$pct" ]; then
-    exit 0
+unavailable=/run/kiosk-brightness.unavailable
+if [ "$mode" = auto ] && [ "$force" != --force ]; then
+    [ "${DIMMING:-yes}" = yes ] || exit 0
+    [ -e "$unavailable" ] && exit 0
+    [ "$(cat "$state" 2>/dev/null)" = "$pct" ] && exit 0
 fi
+rm -f "$unavailable"
 
 bl=""
 if [ -n "${BACKLIGHT_DEVICE:-}" ]; then
@@ -41,8 +47,17 @@ if [ -n "$bl" ] && [ -w "$bl/brightness" ]; then
     raw=$(( max * pct / 100 )); [ "$raw" -lt 1 ] && raw=1
     echo "$raw" > "$bl/brightness"
     echo "backlight $(basename "$bl") -> ${pct}% ($raw/$max)"
-else
-    ddcutil setvcp 10 "$pct"
+elif ddcutil setvcp 10 "$pct"; then
     echo "DDC/CI monitor -> ${pct}%"
+else
+    echo "no brightness control: no backlight device under /sys/class/backlight, and" \
+         "the monitor doesn't answer DDC/CI (it may be off in the monitor's menu)."
+    if [ "$mode" = auto ]; then
+        echo "Scheduled dimming paused until reboot, or: sudo kiosk-brightness auto --force." \
+             "Set DIMMING='no' to turn it off."
+        touch "$unavailable"
+        exit 0
+    fi
+    exit 1
 fi
 echo "$pct" > "$state"

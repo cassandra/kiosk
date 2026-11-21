@@ -68,7 +68,7 @@ done < <(cd "$ROOTFS" && find . -type f | sed 's|^\./||' | sort)
 for d in "${KIOSK_DIRS[@]}"; do
     rmdir --ignore-fail-on-non-empty "$d" 2>/dev/null || true
 done
-rm -f /run/kiosk-brightness
+rm -f /run/kiosk-brightness /run/kiosk-brightness.unavailable
 
 # Older versions aliased kiosk.service as the display manager.
 if [ "$(readlink /etc/systemd/system/display-manager.service 2>/dev/null)" = /etc/systemd/system/kiosk.service ]; then

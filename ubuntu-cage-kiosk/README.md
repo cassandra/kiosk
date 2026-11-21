@@ -17,7 +17,7 @@ For the hardware it has been run on, see [EXAMPLE-SETUP.md](EXAMPLE-SETUP.md).
 | Start page + `kiosk-watchdog.service` | Server-down recovery; see "When the server is down" below |
 | `/etc/opt/chrome/policies/managed/kiosk.json` | Chrome policy `AutoplayAllowed` (backup in case the flag ever stops working) |
 | `/etc/default/kiosk` | **Settings**: URL, day/night times and brightness, extra Chrome flags, lid action (see "Settings") |
-| `kiosk-brightness` + timer | Every 5 min, applies the day/night level. Laptop: sysfs backlight. External monitor: `ddcutil` (DDC/CI). A manual change sticks until the next day/night switch. |
+| `kiosk-brightness` + timer | Every 5 min, applies the day/night level. Laptop: sysfs backlight. External monitor: `ddcutil` (DDC/CI). A manual change sticks until the next day/night switch. If the screen has neither, it says so once in its log and pauses until reboot; `DIMMING='no'` turns scheduled dimming off. |
 | `kiosk-volume` + `triggerhappy` | Keyboard volume/mute keys work without a desktop (see "Volume keys" below) |
 | `kiosk-restart` + timer | At `RESTART_TIME` (default 04:30), restarts the browser: every day, or with `RESTART_DAILY='no'` only if Chrome was updated since it started |
 | `/etc/apt/apt.conf.d/51kiosk-chrome-updates` | With `AUTO_UPDATE_CHROME='yes'` (default), Ubuntu's automatic updates also update Chrome. Without it they never do: they only cover Ubuntu's own packages. |

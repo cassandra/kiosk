@@ -20,6 +20,10 @@ KIOSK_URL=''
 # it uses (reachable only from this machine). Blank = no watchdog.
 WATCHDOG_PORT='9222'
 
+# [timer] Scheduled dimming: 'yes' = set the brightness on the schedule below;
+# 'no' = never change it (e.g. a screen with no brightness control).
+DIMMING='yes'
+
 # [timer] Brightness schedule (24h HHMM) and levels (percent, 1-100).
 DAY_START='0630'
 NIGHT_START='2355'
