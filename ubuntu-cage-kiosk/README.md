@@ -138,7 +138,7 @@ policies above turn the risky ones into no-ops or a "blocked" page, and `kiosk-w
 closes any tab other than the kiosk's own within about 5 seconds (new tab, history, a new
 window or split view). What remains: Ctrl+W or Alt+F4 closes the browser, and it restarts
 at the start page about 5 seconds later; Alt+Left goes back within the page's history;
-Ctrl+L and typing a URL may still reach another site. With no keyboard attached none of
+Ctrl+L does nothing in kiosk mode. With no keyboard attached none of
 this applies. A web app that opens pop-ups or new tabs will have them closed too.
 
 **Getting to a text console:** press Ctrl+Alt+F2 to switch to a login terminal

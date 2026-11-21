@@ -65,9 +65,20 @@ def devtools_get(port, path):
         return r.read()
 
 
+def is_browser_ui(target):
+    """
+    Pages that are part of Chrome's own interface (e.g. the address bar's
+    dropdown, chrome://omnibox-popup.top-chrome/), which some Chrome versions
+    list as pages. They aren't tabs and can't be closed.
+    """
+    host = urllib.parse.urlsplit(target.get('url', '')).hostname or ''
+    return host.endswith('.top-chrome')
+
+
 def list_pages(port):
     """The browser's tabs, as DevTools targets ('id', 'url', 'webSocketDebuggerUrl', ...)."""
-    return [t for t in json.loads(devtools_get(port, '/json')) if t.get('type') == 'page']
+    return [t for t in json.loads(devtools_get(port, '/json'))
+            if t.get('type') == 'page' and not is_browser_ui(t)]
 
 
 def close_page(port, target_id):
@@ -242,7 +253,10 @@ def main():
             for page in pages:
                 if page['id'] != kept_id:
                     log(f"closing extra tab ({page.get('url', '')})")
-                    close_page(port, page['id'])
+                    try:
+                        close_page(port, page['id'])
+                    except OSError as e:
+                        log(f'could not close it: {e}')
             with DevTools(kiosk_page) as devtools:
                 state = devtools.page_state()
                 if not is_broken(state):
