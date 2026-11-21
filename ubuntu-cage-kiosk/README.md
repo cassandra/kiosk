@@ -118,7 +118,9 @@ Two pieces recover from this without anyone logging in:
 - **`kiosk-watchdog`**: every 5 seconds, closes any extra tabs, then asks Chrome what the tab shows. If it is the
   browser's error page, or a 502/503/504 page (e.g. a proxy in front of an app that is
   still starting), it sends the browser to the start page. Pages that loaded normally are
-  never touched, including ones showing the app's own outage message.
+  never touched, including ones showing the app's own outage message. If the tab stops
+  responding (it crashed, "Aw, Snap!", or its script is stuck) for 3 checks in a row, about
+  20 seconds, it is restarted at the start page too.
 
 The watchdog talks to Chrome through its DevTools port (`WATCHDOG_PORT`, default 9222),
 which Chrome only opens on 127.0.0.1: other machines can't reach it, but any program on

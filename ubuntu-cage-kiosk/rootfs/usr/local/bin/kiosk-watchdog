@@ -15,6 +15,9 @@ sends the browser to the kiosk start page, which waits for the server and then
 loads KIOSK_URL. Pages that loaded normally are never touched, including ones
 showing the web app's own "server unreachable" message.
 
+If the tab stops responding (its renderer crashed, "Aw, Snap!", or its script
+is stuck) for several checks in a row, it is sent to the start page too.
+
 A kiosk shows exactly one tab. Keyboard shortcuts (new tab, history, a new
 window or split view) can open more, which a kiosk has no way to close. Any
 tab other than the kiosk's own is closed.
@@ -38,6 +41,8 @@ CONFIG = '/etc/default/kiosk'
 # Same start page as kiosk-browser.
 START_PAGE = 'file:///usr/local/share/kiosk/start.html'
 CHECK_INTERVAL_SECS = 5
+# Consecutive checks a tab may fail to respond before it is restarted.
+UNRESPONSIVE_CHECKS = 3
 HTTP_TIMEOUT_SECS = 5
 # Responses meaning "the server is there but the app isn't (yet)".
 GATEWAY_ERROR_STATUSES = {502, 503, 504}
@@ -84,6 +89,10 @@ def list_pages(port):
 def browser_target(port):
     """The browser itself as a DevTools target (for Target.* commands)."""
     return json.loads(devtools_get(port, '/json/version'))
+
+
+class PageUnresponsive(Exception):
+    pass
 
 
 def close_page(port, target_id):
@@ -210,8 +219,9 @@ class DevTools:
         """
         Return {'url', 'failed', 'status'} for the page's main frame. 'failed'
         means the browser is showing its own error page. The frame tree says
-        this without running any script; the HTTP status needs a script, which
-        may not run on an error page, so it falls back to 0.
+        this without running any script. The HTTP status needs a script: on an
+        error page it may not run (status 0); on any other page, no answer
+        means the page is unresponsive (PageUnresponsive).
         """
         frame = self.call('Page.getFrameTree')['frameTree']['frame']
         url = frame.get('url', '')
@@ -219,7 +229,9 @@ class DevTools:
         try:
             result = self.call('Runtime.evaluate', {'expression': RESPONSE_STATUS_JS, 'returnByValue': True})
             status = int(result['result'].get('value') or 0)
-        except (ConnectionError, ValueError, KeyError):
+        except (OSError, ValueError, KeyError) as e:
+            if not failed:
+                raise PageUnresponsive(f'no answer from the page: {e}') from e
             status = 0
         return {'url': frame.get('unreachableUrl', url), 'failed': failed, 'status': status}
 
@@ -235,9 +247,26 @@ def start_page_url(kiosk_url):
     return f"{START_PAGE}?url={urllib.parse.quote(kiosk_url, safe='')}"
 
 
+def restart_page(port, page, url):
+    """
+    Load url in an unresponsive tab; if the tab won't take it, replace the tab.
+    Returns the id of the tab now showing url.
+    """
+    try:
+        with DevTools(page) as devtools:
+            devtools.navigate(url)
+        return page['id']
+    except (OSError, ValueError, KeyError):
+        with DevTools(browser_target(port)) as browser:
+            new_id = browser.call('Target.createTarget', {'url': url})['targetId']
+            browser.call('Target.closeTarget', {'targetId': page['id']})
+        return new_id
+
+
 def main():
     last_status = None  # log only when this changes
     kept_id = None
+    unresponsive = 0
 
     def report(status):
         nonlocal last_status
@@ -253,28 +282,43 @@ def main():
             continue
         try:
             pages = list_pages(port)
-            if not pages:
-                report('browser has no tab')
-                continue
-            kiosk_page = choose_kiosk_page(pages, kept_id, kiosk_url)
-            kept_id = kiosk_page['id']
-            for page in pages:
-                if page['id'] != kept_id:
-                    log(f"closing extra tab ({page.get('url', '')})")
-                    try:
-                        close_page(port, page['id'])
-                    except OSError as e:
-                        log(f'could not close it: {e}')
+        except (OSError, ValueError, KeyError) as e:
+            report(f'browser not reachable on port {port}: {e}')
+            continue
+        if not pages:
+            report('browser has no tab')
+            continue
+        kiosk_page = choose_kiosk_page(pages, kept_id, kiosk_url)
+        kept_id = kiosk_page['id']
+        for page in pages:
+            if page['id'] != kept_id:
+                log(f"closing extra tab ({page.get('url', '')})")
+                try:
+                    close_page(port, page['id'])
+                except OSError as e:
+                    log(f'could not close it: {e}')
+        try:
             with DevTools(kiosk_page) as devtools:
                 state = devtools.page_state()
+                unresponsive = 0
                 if not is_broken(state):
                     report('page ok')
                     continue
                 log(f"page failed to load ({state['url']}, status {state['status']}); going to the start page")
                 devtools.navigate(start_page_url(kiosk_url))
                 last_status = None
-        except (OSError, ValueError, KeyError) as e:
-            report(f'browser not reachable on port {port}: {e}')
+        except (PageUnresponsive, OSError, ValueError, KeyError) as e:
+            unresponsive += 1
+            log(f'page not responding ({unresponsive}/{UNRESPONSIVE_CHECKS}): {e}')
+            if unresponsive < UNRESPONSIVE_CHECKS:
+                continue
+            unresponsive = 0
+            log('restarting the page at the start page')
+            try:
+                kept_id = restart_page(port, kiosk_page, start_page_url(kiosk_url))
+            except (OSError, ValueError, KeyError) as e:
+                log(f'could not restart the page: {e}')
+            last_status = None
 
 
 if __name__ == '__main__':
