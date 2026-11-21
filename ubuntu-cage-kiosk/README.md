@@ -140,8 +140,9 @@ window or split view). What remains: Ctrl+W or Alt+F4 closes the browser, and it
 at the start page about 5 seconds later; Alt+Left goes back within the page's history;
 Ctrl+L does nothing in kiosk mode. With no keyboard attached none of
 this applies. A web app that opens pop-ups or new tabs will have them closed too.
-Developer tools (Ctrl+Shift+I) stay available, and the same keys close them: Chrome's policy
-to disallow them also stops `kiosk-watchdog` from reading the page.
+Ctrl+Shift+I shows a dismissable "not allowed" message. Don't add Chrome's
+`DeveloperToolsAvailability` policy to block developer tools: it also blocks the DevTools
+connection `kiosk-watchdog` needs to read the page.
 
 **Getting to a text console:** press Ctrl+Alt+F2 to switch to a login terminal
 (cage is started with `-s` to allow this), and Ctrl+Alt+F1 to return.
