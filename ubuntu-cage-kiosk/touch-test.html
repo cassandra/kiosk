@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<!--
+  touch-test.html: check how the kiosk browser turns screen touches into clicks.
+  Shows, for every touch: pointer type, how long the finger was down, and whether
+  (and how fast) a click followed. Left box = normal page; right box =
+  touch-action:none, as used by pages with custom pan/zoom/gesture handling.
+  Use: see README.md "Testing touch".
+-->
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kiosk touch test</title>
+<style>
+  body { font: 18px sans-serif; margin: 0; padding: 12px; background: #222; color: #eee; }
+  h1 { font-size: 22px; margin: 0 0 8px; }
+  .row { display: flex; gap: 12px; }
+  .pad { flex: 1; height: 38vh; border: 3px solid #888; border-radius: 12px;
+         display: flex; align-items: center; justify-content: center; font-size: 26px;
+         user-select: none; -webkit-user-select: none; }
+  #normal { background: #2d4a6b; }
+  #none   { background: #5b3b6b; touch-action: none; }
+  .flash  { background: #3c8c3c !important; }
+  #stats  { margin: 10px 0; font-size: 22px; }
+  #log    { font: 16px monospace; height: 38vh; overflow: auto; background: #111; padding: 6px; }
+  button  { font-size: 20px; padding: 6px 14px; }
+</style>
+</head>
+<body>
+<h1>Touch test: tap each box quickly, then slowly</h1>
+<div class="row">
+  <div class="pad" id="normal">normal</div>
+  <div class="pad" id="none">touch-action: none</div>
+</div>
+<div id="stats"></div>
+<button id="clear">clear</button>
+<div id="log"></div>
+<script>
+  const log = document.getElementById('log');
+  const stats = document.getElementById('stats');
+  const s = { normal: { taps: 0, clicks: 0 }, none: { taps: 0, clicks: 0 } };
+  const down = {}; let lastUp = {};
+  function line(t) { log.textContent = t + '\n' + log.textContent; }
+  function show() {
+    stats.textContent = `normal: ${s.normal.clicks}/${s.normal.taps} taps clicked   |   ` +
+                        `touch-action:none: ${s.none.clicks}/${s.none.taps} taps clicked`;
+  }
+  for (const id of ['normal', 'none']) {
+    const el = document.getElementById(id);
+    el.addEventListener('pointerdown', e => { down[id] = performance.now(); });
+    el.addEventListener('pointerup', e => {
+      const held = down[id] ? Math.round(performance.now() - down[id]) : -1;
+      lastUp[id] = performance.now(); s[id].taps++;
+      line(`${id.padEnd(6)} up    type=${e.pointerType.padEnd(5)} held=${held} ms`);
+      show();
+    });
+    el.addEventListener('click', e => {
+      const after = lastUp[id] ? Math.round(performance.now() - lastUp[id]) : -1;
+      s[id].clicks++; el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 150);
+      line(`${id.padEnd(6)} CLICK ${after} ms after up`);
+      show();
+    });
+  }
+  document.getElementById('clear').addEventListener('click', () => {
+    log.textContent = ''; for (const k in s) { s[k].taps = 0; s[k].clicks = 0; } show();
+  });
+  show();
+</script>
+</body>
+</html>
