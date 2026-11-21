@@ -3,3 +3,6 @@ NOTES
 
 # Editor backups
 *~
+
+# Per-machine kiosk settings (install-kiosk.sh --config)
+local/

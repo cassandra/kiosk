@@ -16,8 +16,12 @@
 # system. Files ending in .in are templates: @KIOSK_USER@ and
 # @LID_SWITCH_ACTION@ are filled in, and the .in suffix is dropped.
 #
-# Usage:   sudo ./install-kiosk.sh <url>
-# Re-run:  safe; re-running with a new URL updates it.
+# Usage:   sudo ./install-kiosk.sh [--config <file>] [<url>]
+#   <url>            the page to show; overrides KIOSK_URL from any config file.
+#   --config <file>  settings to use (see rootfs/etc/default/kiosk for all of them).
+#                    Each setting comes from, in order: <url> (KIOSK_URL only),
+#                    --config <file>, the existing /etc/default/kiosk, the default.
+# Re-run:  safe; keeps existing settings unless overridden.
 # Revert:  sudo ./uninstall-kiosk.sh [--purge]  (see README.md)
 #
 set -euo pipefail
@@ -25,6 +29,7 @@ set -euo pipefail
 KIOSK_USER=kiosk
 CONFIG=/etc/default/kiosk
 ROOTFS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/rootfs"
+CONFIG_TEMPLATE="$ROOTFS/etc/default/kiosk"
 
 die() { echo "ERROR: $*" >&2; exit 1; }
 step() { echo; echo "==> $*"; }
@@ -43,10 +48,75 @@ install_template() {
     chmod "$1" "/$2"
 }
 
+# config_keys <file>: the setting names assigned in <file>.
+config_keys() {
+    sed -n 's/^\([A-Z_][A-Z0-9_]*\)=.*/\1/p' "$1"
+}
+
+# config_get <file> <key>: print <key>'s value from <file>; fails if <file>
+# doesn't set it.
+config_get() {
+    # shellcheck disable=SC1090
+    ( set +u; . "$1"; [ -n "${!2+x}" ] || exit 1; printf '%s' "${!2}" )
+}
+
+# config_value <key>: the value <key> gets, by the precedence in the header.
+config_value() {
+    local f
+    if [ "$1" = KIOSK_URL ] && [ -n "$URL" ]; then
+        printf '%s' "$URL"
+        return
+    fi
+    for f in "$CONFIG_FILE" "$CONFIG" "$CONFIG_TEMPLATE"; do
+        [ -n "$f" ] && [ -f "$f" ] && config_get "$f" "$1" && return
+    done
+}
+
+# warn_unknown_settings <file>: report settings in <file> that aren't in the
+# template (typos, or settings that no longer exist). They are not kept.
+warn_unknown_settings() {
+    local key
+    for key in $(config_keys "$1"); do
+        grep -q "^$key=" "$CONFIG_TEMPLATE" || echo "WARNING: ignoring unknown setting $key in $1" >&2
+    done
+}
+
+# write_config: rewrite $CONFIG from the template, with each setting's value
+# from config_value. New settings get their defaults; comments come from the
+# template.
+write_config() {
+    local tmp line key value
+    tmp=$(mktemp)
+    while IFS= read -r line; do
+        if [[ $line =~ ^([A-Z_][A-Z0-9_]*)= ]]; then
+            key=${BASH_REMATCH[1]}
+            value=$(config_value "$key")
+            printf "%s='%s'\n" "$key" "${value//\'/\'\\\'\'}" >> "$tmp"
+        else
+            printf '%s\n' "$line" >> "$tmp"
+        fi
+    done < "$CONFIG_TEMPLATE"
+    install -m 644 "$tmp" "$CONFIG"
+    rm -f "$tmp"
+}
+
+usage() { echo "usage: sudo $0 [--config <file>] [<url>]" >&2; exit 2; }
+
+URL=''
+CONFIG_FILE=''
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --config) [ $# -ge 2 ] || usage; CONFIG_FILE=$2; shift 2 ;;
+        -*)       usage ;;
+        *)        [ -z "$URL" ] || usage; URL=$1; shift ;;
+    esac
+done
+
 [ "$(id -u)" -eq 0 ] || die "run with sudo"
-URL="${1:-}"
-[ -n "$URL" ] || die "usage: sudo $0 <url>"
 [ -d "$ROOTFS" ] || die "missing $ROOTFS: copy the whole ubuntu-cage-kiosk directory, not just this script"
+[ -z "$CONFIG_FILE" ] || [ -f "$CONFIG_FILE" ] || die "no such config file: $CONFIG_FILE"
+KIOSK_URL=$(config_value KIOSK_URL)
+[ -n "$KIOSK_URL" ] || die "no URL: pass <url>, or set KIOSK_URL in the --config file"
 
 # shellcheck disable=SC1091
 . /etc/os-release
@@ -81,21 +151,13 @@ done
 
 # ---------------------------------------------------------------------------
 step "Writing $CONFIG"
-if [ ! -f "$CONFIG" ]; then
-    install_file 644 etc/default/kiosk
-fi
-# Set/replace the URL line without disturbing other settings.
-grep -v '^KIOSK_URL=' "$CONFIG" > "$CONFIG.tmp"
-printf "KIOSK_URL='%s'\n" "$URL" >> "$CONFIG.tmp"
-mv "$CONFIG.tmp" "$CONFIG"
-if ! grep -q '^LID_SWITCH_ACTION=' "$CONFIG"; then     # added in a later version
-    { echo; sed -n '/^# Laptop lid:/,/^LID_SWITCH_ACTION=/p' "$ROOTFS/etc/default/kiosk"; } >> "$CONFIG"
-fi
-chmod 644 "$CONFIG"
+for f in "$CONFIG_FILE" "$CONFIG"; do
+    [ -n "$f" ] && [ -f "$f" ] && warn_unknown_settings "$f"
+done
+write_config
 
 # Lid action: the setting, or auto-detected when blank.
-# shellcheck disable=SC1090
-LID_SWITCH_ACTION=$( . "$CONFIG"; echo "${LID_SWITCH_ACTION:-}" )
+LID_SWITCH_ACTION=$(config_get "$CONFIG" LID_SWITCH_ACTION)
 if [ -z "$LID_SWITCH_ACTION" ]; then
     if compgen -G '/proc/acpi/button/lid/*/state' >/dev/null; then
         LID_SWITCH_ACTION=suspend
@@ -173,5 +235,5 @@ systemctl enable triggerhappy.service >/dev/null 2>&1 || true
 systemctl restart triggerhappy.service
 
 echo
-echo "Done. Kiosk URL: $URL"
+echo "Done. Kiosk URL: $KIOSK_URL"
 echo "Reboot to start the kiosk:  sudo reboot"

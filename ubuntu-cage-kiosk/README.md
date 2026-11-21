@@ -15,7 +15,7 @@ For the hardware it has been run on, see [EXAMPLE-SETUP.md](EXAMPLE-SETUP.md).
 | Boot target `multi-user.target` | Boots to text mode so the GNOME login screen (GDM) never starts. GDM stays installed and untouched. |
 | `/usr/local/bin/kiosk-browser` | Chrome `--kiosk` with autoplay allowed, no first-run or translate prompts, no "Restore pages?" after power loss, no swipe-back or pinch-zoom |
 | `/etc/opt/chrome/policies/managed/kiosk.json` | Chrome policy `AutoplayAllowed` (backup in case the flag ever stops working) |
-| `/etc/default/kiosk` | **Settings**: URL, day/night times and brightness, extra Chrome flags |
+| `/etc/default/kiosk` | **Settings**: URL, day/night times and brightness, extra Chrome flags, lid action (see "Settings") |
 | `kiosk-brightness` + timer | Every 5 min, applies the day/night level. Laptop: sysfs backlight. External monitor: `ddcutil` (DDC/CI). A manual change sticks until the next day/night switch. |
 | `kiosk-volume` + `triggerhappy` | Keyboard volume/mute keys work without a desktop (see "Volume keys" below) |
 | `kiosk-restart.timer` | Restarts the browser daily at 04:30 |
@@ -38,21 +38,41 @@ sudo reboot
 
 Or `git clone` this repository on the machine instead of copying.
 
-Quote the URL: query strings contain `&`. Re-running the script is safe; re-running with a
-new URL replaces it.
+Quote the URL: query strings contain `&`. Re-running the script is safe, and keeps the
+existing settings unless you override them (see "Settings").
+
+If the page needs a sign-in, sign in once on the machine itself. Chrome keeps cookies and
+sessions in `~kiosk/.config/kiosk-chrome`, so they survive restarts and reboots. On a
+touch-only machine with no keyboard, either the web app provides its own on-screen input or
+you plug in a USB keyboard for this step.
+
+## Settings
+
+All settings live in `/etc/default/kiosk`. The defaults, with a comment for each setting, are
+in [`rootfs/etc/default/kiosk`](rootfs/etc/default/kiosk). Each setting is marked with when a
+change takes effect: `[restart]` (restart the kiosk), `[timer]` (within 5 minutes) or
+`[install]` (re-run the installer).
+
+To choose settings at install time, copy the defaults file, edit it, and pass it in:
+
+```sh
+cp rootfs/etc/default/kiosk local/<machine>.conf      # local/ is git-ignored
+# edit local/<machine>.conf, including KIOSK_URL
+sudo ./install-kiosk.sh --config local/<machine>.conf
+```
+
+Keeping one file per machine makes re-installs repeatable. Each setting comes from, in
+order: the `<url>` argument (for `KIOSK_URL` only), the `--config` file, the existing
+`/etc/default/kiosk`, then the default. The installer rewrites `/etc/default/kiosk` from the
+template each time, keeping values but not comments you added, and adding any new settings
+with their defaults. It warns about settings it doesn't recognize, such as typos.
 
 ## Files
 
 `rootfs/` holds every file the installer puts on the system, at the same path it gets there
 (`rootfs/usr/local/bin/kiosk-browser` becomes `/usr/local/bin/kiosk-browser`). Files ending
 in `.in` are templates: the installer fills in `@KIOSK_USER@` and `@LID_SWITCH_ACTION@` and
-drops the `.in`. `etc/default/kiosk` is only installed when it doesn't exist yet, so
-re-running keeps your settings.
-
-If the page needs a sign-in, sign in once on the machine itself. Chrome keeps cookies and
-sessions in `~kiosk/.config/kiosk-chrome`, so they survive restarts and reboots. On a
-touch-only machine with no keyboard, either the web app provides its own on-screen input or
-you plug in a USB keyboard for this step.
+drops the `.in`. `etc/default/kiosk` is the settings template described above.
 
 ## Verify
 
