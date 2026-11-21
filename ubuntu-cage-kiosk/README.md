@@ -105,7 +105,7 @@ Two pieces recover from this without anyone logging in:
   `KIOSK_URL` directly. It checks every 5 seconds whether the server answers, then loads
   `KIOSK_URL`. It shows what it is waiting for and since when; **START** loads the page
   right away.
-- **`kiosk-watchdog`**: every 10 seconds, asks Chrome what the tab shows. If it is the
+- **`kiosk-watchdog`**: every 5 seconds, closes any extra tabs, then asks Chrome what the tab shows. If it is the
   browser's error page, or a 502/503/504 page (e.g. a proxy in front of an app that is
   still starting), it sends the browser to the start page. Pages that loaded normally are
   never touched, including ones showing the app's own outage message.
@@ -117,7 +117,7 @@ watchdog off. Its log: `journalctl -u kiosk-watchdog -b`.
 
 The start page can only tell whether the server answers, not with what status. If it
 answers with an error page while the app is starting, the browser goes back and forth
-between that page and the start page every 10-15 seconds until the app is ready.
+between that page and the start page every 5-10 seconds until the app is ready.
 
 ## Day-to-day
 
@@ -134,12 +134,12 @@ journalctl -u kiosk-watchdog -b            # server-down recovery
 no in-page way back: the kiosk has no browser controls.
 
 **Keyboard shortcuts:** on a kiosk with a keyboard, Chrome's shortcuts still work, but the
-policies above turn the risky ones into no-ops or a "blocked" page. What remains:
-Ctrl+W or Alt+F4 closes the browser, and it restarts at the start page about 5 seconds later.
-Ctrl+T opens an invisible tab with a "blocked" page; Ctrl+W closes it again. Alt+Left goes
-back within the page's history. Ctrl+L and typing a URL may still reach another site; with
-no keyboard attached none of this applies. To check which policies are active, look at
-`chrome://policy` on another machine with the same file, since the kiosk blocks it.
+policies above turn the risky ones into no-ops or a "blocked" page, and `kiosk-watchdog`
+closes any tab other than the kiosk's own within about 5 seconds (new tab, history, a new
+window or split view). What remains: Ctrl+W or Alt+F4 closes the browser, and it restarts
+at the start page about 5 seconds later; Alt+Left goes back within the page's history;
+Ctrl+L and typing a URL may still reach another site. With no keyboard attached none of
+this applies. A web app that opens pop-ups or new tabs will have them closed too.
 
 **Getting to a text console:** press Ctrl+Alt+F2 to switch to a login terminal
 (cage is started with `-s` to allow this), and Ctrl+Alt+F1 to return.

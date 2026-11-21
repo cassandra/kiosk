@@ -36,6 +36,21 @@ if [ -n "${WATCHDOG_PORT:-}" ]; then
     WATCHDOG_FLAGS=(--remote-debugging-port="$WATCHDOG_PORT")
 fi
 
+# kiosk.service gives the browser a low out-of-memory score (OOMScoreAdjust), but
+# Chrome resets its main process to 0 as it starts. Put it back: the kernel lets
+# a process return to the lowest score systemd gave it without extra rights.
+# $$ is this shell's PID, which becomes Chrome's through the exec below.
+OOM_SCORE_ADJ=$(cat /proc/self/oom_score_adj)
+# Double fork, so the helper isn't left as an unreaped child of Chrome.
+if [ "$OOM_SCORE_ADJ" -lt 0 ]; then
+    ( (
+        for delay in 5 30; do
+            sleep "$delay"
+            echo "$OOM_SCORE_ADJ" > "/proc/$$/oom_score_adj" 2>/dev/null || exit 0
+        done
+    ) & ) </dev/null >/dev/null 2>&1
+fi
+
 # shellcheck disable=SC2086  # EXTRA_CHROME_FLAGS is intentionally word-split
 exec /usr/bin/google-chrome-stable \
     --user-data-dir="$DATA" \

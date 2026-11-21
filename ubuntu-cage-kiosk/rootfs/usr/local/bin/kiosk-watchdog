@@ -15,6 +15,10 @@ sends the browser to the kiosk start page, which waits for the server and then
 loads KIOSK_URL. Pages that loaded normally are never touched, including ones
 showing the web app's own "server unreachable" message.
 
+A kiosk shows exactly one tab. Keyboard shortcuts (new tab, history, a new
+window or split view) can open more, which a kiosk has no way to close. Any
+tab other than the kiosk's own is closed.
+
 Settings (from /etc/default/kiosk): KIOSK_URL, WATCHDOG_PORT (blank = off).
 Run by kiosk-watchdog.service as the kiosk user. Uses only the standard library.
 """
@@ -33,7 +37,7 @@ import urllib.request
 CONFIG = '/etc/default/kiosk'
 # Same start page as kiosk-browser.
 START_PAGE = 'file:///usr/local/share/kiosk/start.html'
-CHECK_INTERVAL_SECS = 10
+CHECK_INTERVAL_SECS = 5
 HTTP_TIMEOUT_SECS = 5
 # Responses meaning "the server is there but the app isn't (yet)".
 GATEWAY_ERROR_STATUSES = {502, 503, 504}
@@ -56,19 +60,49 @@ def read_settings():
     return url, port
 
 
+def devtools_get(port, path):
+    with urllib.request.urlopen(f'http://127.0.0.1:{port}{path}', timeout=HTTP_TIMEOUT_SECS) as r:
+        return r.read()
+
+
+def list_pages(port):
+    """The browser's tabs, as DevTools targets ('id', 'url', 'webSocketDebuggerUrl', ...)."""
+    return [t for t in json.loads(devtools_get(port, '/json')) if t.get('type') == 'page']
+
+
+def close_page(port, target_id):
+    devtools_get(port, f'/json/close/{target_id}')
+
+
+def choose_kiosk_page(pages, kept_id, kiosk_url):
+    """
+    The kiosk's own tab: the one kept last time if it still exists; otherwise
+    one showing the start page or KIOSK_URL's site; otherwise the first.
+    """
+    for page in pages:
+        if page['id'] == kept_id:
+            return page
+    kiosk_origin = urllib.parse.urlsplit(kiosk_url)[:2]
+    for page in pages:
+        url = page.get('url', '')
+        if url.startswith(START_PAGE) or urllib.parse.urlsplit(url)[:2] == kiosk_origin:
+            return page
+    return pages[0]
+
+
 class DevTools:
     """
-    Minimal Chrome DevTools Protocol client for the kiosk's page, over one
-    websocket connection. Use as a context manager.
+    Minimal Chrome DevTools Protocol client for one tab, over one websocket
+    connection. Use as a context manager.
     """
 
-    def __init__(self, port):
-        self.port = port
+    def __init__(self, page):
+        self.page = page
         self.sock = None
         self.next_id = 0
 
     def __enter__(self):
-        ws_url = urllib.parse.urlsplit(self._page_websocket_url())
+        ws_url = urllib.parse.urlsplit(self.page['webSocketDebuggerUrl'])
         self.sock = socket.create_connection((ws_url.hostname, ws_url.port), timeout=HTTP_TIMEOUT_SECS)
         try:
             self._handshake(self.sock, ws_url)
@@ -79,14 +113,6 @@ class DevTools:
 
     def __exit__(self, *exc):
         self.sock.close()
-
-    def _page_websocket_url(self):
-        with urllib.request.urlopen(f'http://127.0.0.1:{self.port}/json', timeout=HTTP_TIMEOUT_SECS) as r:
-            targets = json.load(r)
-        for target in targets:
-            if target.get('type') == 'page':
-                return target['webSocketDebuggerUrl']
-        raise ConnectionError('no page target')
 
     def call(self, method, params=None):
         self.next_id += 1
@@ -192,6 +218,7 @@ def start_page_url(kiosk_url):
 
 def main():
     last_status = None  # log only when this changes
+    kept_id = None
 
     def report(status):
         nonlocal last_status
@@ -206,7 +233,17 @@ def main():
             report('watchdog off (WATCHDOG_PORT or KIOSK_URL blank)')
             continue
         try:
-            with DevTools(port) as devtools:
+            pages = list_pages(port)
+            if not pages:
+                report('browser has no tab')
+                continue
+            kiosk_page = choose_kiosk_page(pages, kept_id, kiosk_url)
+            kept_id = kiosk_page['id']
+            for page in pages:
+                if page['id'] != kept_id:
+                    log(f"closing extra tab ({page.get('url', '')})")
+                    close_page(port, page['id'])
+            with DevTools(kiosk_page) as devtools:
                 state = devtools.page_state()
                 if not is_broken(state):
                     report('page ok')
