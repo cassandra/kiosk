@@ -11,7 +11,7 @@ For the hardware it has been run on, see [EXAMPLE-SETUP.md](EXAMPLE-SETUP.md).
 | Piece | What it does |
 |---|---|
 | `kiosk` user | Locked-password account that runs the browser |
-| `kiosk.service` | Starts **cage** (a compositor that runs one app full-screen) on tty1 at boot, running Chrome; restarts it if it exits. |
+| `kiosk.service` | Starts **cage** (a compositor that runs one app full-screen) on tty1 at boot, running Chrome; restarts it if it exits. If memory runs short, the kernel kills other processes before the browser (`OOMScoreAdjust`). If the machine also runs containers, give them memory limits too. |
 | Boot target `multi-user.target` | Boots to text mode so the GNOME login screen (GDM) never starts. GDM stays installed and untouched. |
 | `/usr/local/bin/kiosk-browser` | Chrome `--kiosk` with autoplay allowed, no first-run or translate prompts, no "Restore pages?" after power loss, no swipe-back or pinch-zoom |
 | Start page + `kiosk-watchdog.service` | Server-down recovery; see "When the server is down" below |
