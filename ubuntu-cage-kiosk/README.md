@@ -157,7 +157,13 @@ Which device is the touchscreen: `sudo libinput list-devices | grep -E '^Device|
 ## Reverting to the normal desktop
 
 ```sh
-sudo systemctl disable kiosk.service kiosk-brightness.timer kiosk-restart.timer triggerhappy.service
-sudo systemctl set-default graphical.target
+sudo ./uninstall-kiosk.sh            # back to the desktop; keeps the kiosk user, settings, packages
+sudo ./uninstall-kiosk.sh --purge    # also removes those: as if never installed
 sudo reboot
 ```
+
+Without `--purge`, re-running the installer later picks up where it was: the same settings
+and the same signed-in browser sessions. `--purge` removes the `kiosk` user and its Chrome
+profile, `/etc/default/kiosk`, and the packages only the kiosk uses (Google Chrome and its
+apt source, cage, ddcutil, triggerhappy). It is also the way to start a test install from
+scratch.

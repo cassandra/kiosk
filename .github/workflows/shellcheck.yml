@@ -10,8 +10,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Run shellcheck
-        # ubuntu-latest ships shellcheck. Checks every installer and the scripts
+        # ubuntu-latest ships shellcheck. Checks the install/uninstall scripts and the scripts
         # they install (rootfs/usr/local/bin, including .in templates).
         run: |
-          find . -name 'install-*.sh' -o -path '*/rootfs/usr/local/bin/*' -type f \
+          find . -name '*-kiosk.sh' -o -path '*/rootfs/usr/local/bin/*' -type f \
             | sort | xargs -r shellcheck -s bash

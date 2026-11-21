@@ -18,7 +18,7 @@
 #
 # Usage:   sudo ./install-kiosk.sh <url>
 # Re-run:  safe; re-running with a new URL updates it.
-# Revert:  see README.md ("Reverting to the normal desktop").
+# Revert:  sudo ./uninstall-kiosk.sh [--purge]  (see README.md)
 #
 set -euo pipefail
 
