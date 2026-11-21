@@ -81,8 +81,16 @@ def list_pages(port):
             if t.get('type') == 'page' and not is_browser_ui(t)]
 
 
+def browser_target(port):
+    """The browser itself as a DevTools target (for Target.* commands)."""
+    return json.loads(devtools_get(port, '/json/version'))
+
+
 def close_page(port, target_id):
-    devtools_get(port, f'/json/close/{target_id}')
+    # Through the browser, not /json/close: Chrome refuses the latter for pages
+    # it won't let DevTools inspect, such as blocked chrome:// pages.
+    with DevTools(browser_target(port)) as browser:
+        browser.call('Target.closeTarget', {'targetId': target_id})
 
 
 def choose_kiosk_page(pages, kept_id, kiosk_url):
@@ -103,8 +111,8 @@ def choose_kiosk_page(pages, kept_id, kiosk_url):
 
 class DevTools:
     """
-    Minimal Chrome DevTools Protocol client for one tab, over one websocket
-    connection. Use as a context manager.
+    Minimal Chrome DevTools Protocol client for one target (a tab, or the
+    browser), over one websocket connection. Use as a context manager.
     """
 
     def __init__(self, page):

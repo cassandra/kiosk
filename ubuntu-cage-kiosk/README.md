@@ -15,7 +15,7 @@ For the hardware it has been run on, see [EXAMPLE-SETUP.md](EXAMPLE-SETUP.md).
 | Boot target `multi-user.target` | Boots to text mode so the GNOME login screen (GDM) never starts. GDM stays installed and untouched. |
 | `/usr/local/bin/kiosk-browser` | Chrome `--kiosk` with autoplay allowed, no first-run or translate prompts, no "Restore pages?" after power loss, no swipe-back or pinch-zoom |
 | Start page + `kiosk-watchdog.service` | Server-down recovery; see "When the server is down" below |
-| `/etc/opt/chrome/policies/managed/kiosk.json` | Chrome policies: `AutoplayAllowed` (backup in case the flag ever stops working), no translate/password/sign-in prompts, and keyboard escapes closed off: no developer tools, incognito or guest windows, new profiles, printing, ending processes from the task manager, or `chrome://` pages (history, downloads, settings, ...). |
+| `/etc/opt/chrome/policies/managed/kiosk.json` | Chrome policies: `AutoplayAllowed` (backup in case the flag ever stops working), no translate/password/sign-in prompts, and keyboard escapes closed off: no incognito or guest windows, new profiles, printing, ending processes from the task manager, or `chrome://` pages (history, downloads, settings, ...). |
 | `/etc/default/kiosk` | **Settings**: URL, day/night times and brightness, extra Chrome flags, lid action (see "Settings") |
 | `kiosk-brightness` + timer | Every 5 min, applies the day/night level. Laptop: sysfs backlight. External monitor: `ddcutil` (DDC/CI). A manual change sticks until the next day/night switch. If the screen has neither, it says so once in its log and pauses until reboot; `DIMMING='no'` turns scheduled dimming off. |
 | `kiosk-volume` + `triggerhappy` | Keyboard volume/mute keys work without a desktop (see "Volume keys" below) |
@@ -140,6 +140,8 @@ window or split view). What remains: Ctrl+W or Alt+F4 closes the browser, and it
 at the start page about 5 seconds later; Alt+Left goes back within the page's history;
 Ctrl+L does nothing in kiosk mode. With no keyboard attached none of
 this applies. A web app that opens pop-ups or new tabs will have them closed too.
+Developer tools (Ctrl+Shift+I) stay available, and the same keys close them: Chrome's policy
+to disallow them also stops `kiosk-watchdog` from reading the page.
 
 **Getting to a text console:** press Ctrl+Alt+F2 to switch to a login terminal
 (cage is started with `-s` to allow this), and Ctrl+Alt+F1 to return.
