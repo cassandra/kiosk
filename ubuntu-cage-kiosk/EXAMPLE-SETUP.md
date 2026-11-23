@@ -41,9 +41,9 @@ Notes:
 - **BIOS:** After Power Loss = Power On; fan/thermal mode set to its quiet option.
 - **Touch:** works out of the box (USB HID). Swipe and pinch do not navigate away.
 - **Cursor:** the TD2230's touch controller (Weida Hi-Tech CoolTouch) also has a "Mouse"
-  interface. `IGNORE_TOUCHSCREEN_MOUSE` removes the arrow cursor this caused, but a hand
-  cursor still shows over buttons until Ubuntu's cage gets a fix (see the README,
-  "Mouse cursor on a touchscreen").
+  interface, which made cage draw a cursor. With `IGNORE_TOUCHSCREEN_MOUSE` there is no
+  cursor; a USB mouse plugged in for debugging shows one, and it goes away when unplugged
+  (see the README, "Mouse cursor on a touchscreen").
 - **Audio:** the card defaulted to analog, because the Tiny's internal speaker makes analog
   always available. Switching to the HDMI profile fixed it (see the README, "Sound out of a
   monitor's speakers"). Volume set to 100% on the PC; loudness set with the monitor's buttons.

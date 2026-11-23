@@ -250,12 +250,13 @@ A separate mouse plugged in for testing is not affected. The rule takes effect a
 reboot. To check that it matched:
 `udevadm info /dev/input/eventN | grep LIBINPUT_IGNORE_DEVICE`.
 
-**Known issue (cage 0.1.5, Ubuntu 24.04):** even with no mouse, a hand cursor may show in
-the middle of the screen over a link or button. cage gives the browser mouse focus at
-the start and then draws the cursor the browser asks for, even though there is no mouse.
-cage fixed this upstream in August 2026 ("seat: drop set_cursor requests when pointer
-capability is absent"). This setup will need no changes once Ubuntu ships a cage with that
-fix; until then the hand cursor stays.
+**Known issue (cage 0.1.5, Ubuntu 24.04):** rarely, a cursor (often a hand) stays on screen
+with no mouse attached. This happens when the browser asks for a cursor just as the last
+mouse goes away, for example while unplugging one, and cage still draws it. It stays
+until `sudo systemctl restart kiosk` or a reboot. cage fixed this upstream in August 2026
+("seat: drop set_cursor requests when pointer capability is absent"); nothing here needs to
+change once Ubuntu ships a cage with that fix. The same can happen if you restart the kiosk
+right after `udevadm trigger` without waiting for udev (`sudo udevadm settle`).
 
 ## Reverting to the normal desktop
 
