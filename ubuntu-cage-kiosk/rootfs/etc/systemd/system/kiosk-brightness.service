@@ -1,5 +1,5 @@
 [Unit]
-Description=Apply kiosk day/night brightness
+Description=Apply the kiosk's scheduled brightness
 
 [Service]
 Type=oneshot

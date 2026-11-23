@@ -16,8 +16,8 @@ For the hardware it has been run on, see [EXAMPLE-SETUP.md](EXAMPLE-SETUP.md).
 | `/usr/local/bin/kiosk-browser` | Chrome `--kiosk` with autoplay allowed, no first-run or translate prompts, no "Restore pages?" after power loss, no swipe-back or pinch-zoom |
 | Start page + `kiosk-watchdog.service` | Server-down recovery; see "When the server is down" below |
 | `/etc/opt/chrome/policies/managed/kiosk.json` | Chrome policies: `AutoplayAllowed` (backup in case the flag ever stops working), no translate/password/sign-in prompts, and keyboard escapes closed off: no incognito or guest windows, new profiles, printing, ending processes from the task manager, or `chrome://` pages (history, downloads, settings, ...). |
-| `/etc/default/kiosk` | **Settings**: URL, day/night times and brightness, extra Chrome flags, lid action (see "Settings") |
-| `kiosk-brightness` + timer | Every 5 min, applies the day/night level. Laptop: sysfs backlight. External monitor: `ddcutil` (DDC/CI). A manual change sticks until the next day/night switch. If the screen has neither, it says so once in its log and pauses until reboot; `DIMMING='no'` turns scheduled dimming off. |
+| `/etc/default/kiosk` | **Settings**: URL, brightness schedule, extra Chrome flags, lid action (see "Settings") |
+| `kiosk-brightness` + timer | Every 5 min, applies the level of the current period: day, night or overnight (by default 100% from 08:00, 25% from 20:00, 5% from 23:55). Laptop: sysfs backlight. External monitor: `ddcutil` (DDC/CI). A manual change sticks until the next period starts. If the screen has neither, it retries at the next two runs (a monitor may still be waking up after a power loss), then says so in its log and pauses until reboot; `DIMMING='no'` turns scheduled dimming off. |
 | `kiosk-volume` + `triggerhappy` | Keyboard volume/mute keys work without a desktop (see "Volume keys" below) |
 | udev rule `90-kiosk-touchscreen-mouse.rules` | With `IGNORE_TOUCHSCREEN_MOUSE='yes'` (default), ignores a touchscreen's unused "Mouse" interface, so no cursor is drawn; see "Mouse cursor on a touchscreen" below |
 | `kiosk-restart` + timer | At `RESTART_TIME` (default 04:30), restarts the browser: every day, or with `RESTART_DAILY='no'` only if Chrome was updated since it started |
@@ -47,6 +47,16 @@ To update later:
 ```sh
 cd kiosk && git pull
 sudo ./ubuntu-cage-kiosk/install-kiosk.sh && sudo reboot
+```
+
+**Upgrading from the two-period brightness schedule** (installs from before day, night and
+overnight): the installer keeps existing values, so the old night setting (from 23:55 at
+15%) would become the new evening "night" period and leave the order wrong. Delete the
+old lines first so the new defaults apply, then change them in `/etc/default/kiosk` if you
+want different ones:
+
+```sh
+sudo sed -i '/^\(DAY\|NIGHT\)_/d' /etc/default/kiosk
 ```
 
 The installer needs the whole directory (it installs the files under `rootfs/`), so if you
@@ -100,7 +110,12 @@ After installing, check the things a kiosk is for:
 2. **Touch:** taps work, and swiping or pinching does not navigate away from the page.
 3. **Sound with nobody touching it:** after a reboot, without touching the screen,
    trigger something on the page that plays audio. This is what the autoplay settings are for.
-4. **Brightness:** `sudo kiosk-brightness 20`, then `sudo kiosk-brightness auto --force`.
+4. **Brightness:** `sudo kiosk-brightness 20` changes the level, and it stays after the
+   next 5-minute run; `sudo kiosk-brightness auto --force` goes back to the current
+   period's level. After `sudo systemctl restart kiosk` (what the daily restart does) the
+   level is unchanged. After a reboot, and after the power-loss test below,
+   `journalctl -b -u kiosk-brightness` shows the current period's level applied about
+   45 seconds after boot.
 5. **Power loss:** pull the plug and restore it. The machine should boot unattended to the
    page, with sound still on the right output. On desktops this needs the BIOS/UEFI
    "After Power Loss" setting set to "Power On".
@@ -142,7 +157,7 @@ between that page and the start page every 5-10 seconds until the app is ready.
 sudoedit /etc/default/kiosk                # change URL / schedule / levels
 sudo systemctl restart kiosk               # reload: restarts Chrome on KIOSK_URL (~5 s, no reboot)
 sudo kiosk-brightness auto --force         # re-apply brightness now
-sudo kiosk-brightness 40                   # one-off level (sticks until next day/night switch)
+sudo kiosk-brightness 40                   # one-off level (sticks until the next period)
 journalctl -u kiosk -b                     # browser/cage logs
 journalctl -u kiosk-watchdog -b            # server-down recovery
 ```

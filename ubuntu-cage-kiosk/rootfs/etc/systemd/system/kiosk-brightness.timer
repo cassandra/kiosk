@@ -1,5 +1,5 @@
 [Unit]
-Description=Check kiosk day/night brightness every 5 minutes
+Description=Check the kiosk's scheduled brightness every 5 minutes
 
 [Timer]
 OnBootSec=45s

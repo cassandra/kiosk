@@ -10,7 +10,7 @@
 #   - Restarts Chrome if it exits.
 #   - Waits for the server at start, and recovers from a page that failed to
 #     load during a server outage (start page + kiosk-watchdog).
-#   - Scheduled day/night brightness (laptop backlight or DDC/CI monitor).
+#   - Scheduled day/night/overnight brightness (laptop backlight or DDC/CI monitor).
 #   - Scheduled browser restart (daily, or only after a Chrome update), and
 #     Chrome updated by Ubuntu's automatic updates.
 #   - Keyboard volume/mute keys work (triggerhappy -> kiosk-volume).

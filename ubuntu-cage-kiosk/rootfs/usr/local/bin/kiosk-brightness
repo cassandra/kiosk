@@ -1,37 +1,75 @@
 #!/usr/bin/env bash
-# kiosk-brightness [auto|day|night|<percent>] [--force]
-#   auto: pick day/night level from the schedule in /etc/default/kiosk.
-#   Only touches the hardware when the target level changes (so a manual
-#   adjustment sticks until the next day/night transition), unless --force.
-#   Does nothing when DIMMING='no'. If the screen has no brightness control,
-#   auto says so once and then stays quiet until a reboot or --force.
+# kiosk-brightness [auto|day|night|overnight|<percent>] [--force]
+#   auto: apply the level of the current period (day, night or overnight) from
+#   the schedule in /etc/default/kiosk. Only touches the hardware when the
+#   period's level changes, so a manual level (any other mode) sticks until the
+#   next period starts, unless --force. Does nothing when DIMMING='no'.
+#   If the screen has no brightness control, auto says so after 3 failed runs in
+#   a row and then stays quiet until a reboot or --force.
+# For testing, KIOSK_BRIGHTNESS_NOW=HHMM sets the time of day.
 set -eu
 # shellcheck disable=SC1091
 . /etc/default/kiosk
 
-mode="${1:-auto}"; force="${2:-}"
-now=$((10#$(date +%H%M)))
-day=$((10#$DAY_START)); night=$((10#$NIGHT_START))
+mode="${1:-auto}"; force="${2:-}"; period=''
+PERIODS=(day night overnight)
+
+# minutes <HHMM>: minutes since midnight.
+minutes() { echo $(( 10#${1:0:2} * 60 + 10#${1:2:2} )); }
+
+# setting <name>: the value of a setting, e.g. setting DAY_START.
+setting() { printf '%s' "${!1:-}"; }
+
+# Check the schedule settings, so a typo gives a clear message in the log.
+starts=()
+for p in "${PERIODS[@]}"; do
+    P=${p^^}
+    start=$(setting "${P}_START"); level=$(setting "${P}_BRIGHTNESS")
+    [[ $start =~ ^([01][0-9]|2[0-3])[0-5][0-9]$ ]] \
+        || { echo "${P}_START must be 24h HHMM (got '$start')" >&2; exit 1; }
+    [[ $level =~ ^[0-9]+$ ]] && [ "$((10#$level))" -ge 1 ] && [ "$((10#$level))" -le 100 ] \
+        || { echo "${P}_BRIGHTNESS must be 1-100 (got '$level')" >&2; exit 1; }
+    for s in "${starts[@]}"; do
+        [ "$s" != "$start" ] || { echo "DAY_START, NIGHT_START and OVERNIGHT_START must differ" >&2; exit 1; }
+    done
+    starts+=("$start")
+done
+
+# current_period: the period whose start time passed most recently.
+current_period() {
+    local now p elapsed best='' best_elapsed=1440
+    now=$(minutes "${KIOSK_BRIGHTNESS_NOW:-$(date +%H%M)}")
+    for p in "${PERIODS[@]}"; do
+        elapsed=$(( (now - $(minutes "$(setting "${p^^}_START")") + 1440) % 1440 ))
+        if [ "$elapsed" -lt "$best_elapsed" ]; then
+            best=$p; best_elapsed=$elapsed
+        fi
+    done
+    echo "$best"
+}
 
 case "$mode" in
-    auto)  if [ "$now" -ge "$day" ] && [ "$now" -lt "$night" ]; then pct=$DAY_BRIGHTNESS
-           else pct=$NIGHT_BRIGHTNESS; fi ;;
-    day)   pct=$DAY_BRIGHTNESS ;;
-    night) pct=$NIGHT_BRIGHTNESS ;;
-    *[!0-9]*|'') echo "usage: $0 [auto|day|night|<percent>] [--force]" >&2; exit 2 ;;
-    *)     pct=$mode ;;
+    auto)                period=$(current_period)
+                         pct=$(setting "${period^^}_BRIGHTNESS") ;;
+    day|night|overnight) pct=$(setting "${mode^^}_BRIGHTNESS") ;;
+    *[!0-9]*|'')         echo "usage: $0 [auto|day|night|overnight|<percent>] [--force]" >&2; exit 2 ;;
+    *)                   pct=$mode ;;
 esac
+pct=$((10#$pct))
 [ "$pct" -lt 1 ] && pct=1
 [ "$pct" -gt 100 ] && pct=100
 
+# Auto mode remembers the scheduled level it last applied; manual levels don't
+# change it, so the next auto run leaves them alone until the period changes.
 state=/run/kiosk-brightness
 unavailable=/run/kiosk-brightness.unavailable
+failures=/run/kiosk-brightness.failures
 if [ "$mode" = auto ] && [ "$force" != --force ]; then
     [ "${DIMMING:-yes}" = yes ] || exit 0
     [ -e "$unavailable" ] && exit 0
     [ "$(cat "$state" 2>/dev/null)" = "$pct" ] && exit 0
 fi
-rm -f "$unavailable"
+[ "$mode" = auto ] && [ "$force" = --force ] && rm -f "$unavailable" "$failures"
 
 bl=""
 if [ -n "${BACKLIGHT_DEVICE:-}" ]; then
@@ -46,18 +84,29 @@ if [ -n "$bl" ] && [ -w "$bl/brightness" ]; then
     max=$(cat "$bl/max_brightness")
     raw=$(( max * pct / 100 )); [ "$raw" -lt 1 ] && raw=1
     echo "$raw" > "$bl/brightness"
-    echo "backlight $(basename "$bl") -> ${pct}% ($raw/$max)"
+    echo "backlight $(basename "$bl") -> ${pct}% ($raw/$max)${period:+ ($period)}"
 elif ddcutil setvcp 10 "$pct"; then
-    echo "DDC/CI monitor -> ${pct}%"
+    echo "DDC/CI monitor -> ${pct}%${period:+ ($period)}"
 else
     echo "no brightness control: no backlight device under /sys/class/backlight, and" \
          "the monitor doesn't answer DDC/CI (it may be off in the monitor's menu)."
     if [ "$mode" = auto ]; then
-        echo "Scheduled dimming paused until reboot, or: sudo kiosk-brightness auto --force." \
-             "Set DIMMING='no' to turn it off."
-        touch "$unavailable"
+        # A monitor that is still waking up after a power loss may not answer
+        # yet: only pause after 3 failed runs in a row (about 15 minutes).
+        count=$(( $(cat "$failures" 2>/dev/null || echo 0) + 1 ))
+        if [ "$count" -ge 3 ]; then
+            echo "Scheduled dimming paused until reboot, or: sudo kiosk-brightness auto --force." \
+                 "Set DIMMING='no' to turn it off."
+            touch "$unavailable"
+            rm -f "$failures"
+        else
+            echo "$count" > "$failures"
+            echo "Trying again at the next scheduled run ($count of 3)."
+        fi
         exit 0
     fi
     exit 1
 fi
-echo "$pct" > "$state"
+rm -f "$unavailable" "$failures"
+[ "$mode" = auto ] && echo "$pct" > "$state"
+exit 0

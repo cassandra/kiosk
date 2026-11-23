@@ -24,11 +24,15 @@ WATCHDOG_PORT='9222'
 # 'no' = never change it (e.g. a screen with no brightness control).
 DIMMING='yes'
 
-# [timer] Brightness schedule (24h HHMM) and levels (percent, 1-100).
-DAY_START='0630'
-NIGHT_START='2355'
+# [timer] Brightness schedule: three periods, each from its start time (24h HHMM)
+# until the next one starts, at its level (percent, 1-100). A manual level
+# (sudo kiosk-brightness 40) stays until the next period starts.
+DAY_START='0800'
 DAY_BRIGHTNESS='100'
-NIGHT_BRIGHTNESS='15'
+NIGHT_START='2000'
+NIGHT_BRIGHTNESS='25'
+OVERNIGHT_START='2355'
+OVERNIGHT_BRIGHTNESS='5'
 
 # [timer] Laptop backlight device under /sys/class/backlight (blank = auto-detect).
 # If there is no backlight device, ddcutil (DDC/CI) is used instead.
