@@ -53,6 +53,11 @@ AUTO_UPDATE_CHROME='yes'
 # takes precedence until ~kiosk/.local/state/wireplumber is cleared.
 AUDIO_PROFILE=''
 
+# [install] 'yes' = ignore a touchscreen's extra "Mouse" interface, which many touch
+# controllers have, so no mouse cursor is drawn on a touch-only kiosk. A separate
+# mouse plugged in still works. 'no' = treat it as a mouse.
+IGNORE_TOUCHSCREEN_MOUSE='yes'
+
 # [restart] Extra Chrome flags, space separated (e.g. '--force-device-scale-factor=1.25').
 EXTRA_CHROME_FLAGS=''
 

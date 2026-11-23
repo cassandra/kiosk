@@ -19,6 +19,7 @@ For the hardware it has been run on, see [EXAMPLE-SETUP.md](EXAMPLE-SETUP.md).
 | `/etc/default/kiosk` | **Settings**: URL, day/night times and brightness, extra Chrome flags, lid action (see "Settings") |
 | `kiosk-brightness` + timer | Every 5 min, applies the day/night level. Laptop: sysfs backlight. External monitor: `ddcutil` (DDC/CI). A manual change sticks until the next day/night switch. If the screen has neither, it says so once in its log and pauses until reboot; `DIMMING='no'` turns scheduled dimming off. |
 | `kiosk-volume` + `triggerhappy` | Keyboard volume/mute keys work without a desktop (see "Volume keys" below) |
+| udev rule `90-kiosk-touchscreen-mouse.rules` | With `IGNORE_TOUCHSCREEN_MOUSE='yes'` (default), ignores a touchscreen's unused "Mouse" interface, so no cursor is drawn; see "Mouse cursor on a touchscreen" below |
 | `kiosk-restart` + timer | At `RESTART_TIME` (default 04:30), restarts the browser: every day, or with `RESTART_DAILY='no'` only if Chrome was updated since it started |
 | `/etc/apt/apt.conf.d/51kiosk-chrome-updates` | With `AUTO_UPDATE_CHROME='yes'` (default), Ubuntu's automatic updates also update Chrome. Without it they never do: they only cover Ubuntu's own packages. |
 | logind drop-in + sleep targets | Never suspends from inactivity. Laptops suspend when the lid closes and resume when it opens; machines without a lid never sleep. Set `LID_SWITCH_ACTION` in `/etc/default/kiosk` (`suspend`/`ignore`) and re-run the installer to change it. With an external monitor attached, closing the lid is ignored. |
@@ -230,6 +231,31 @@ sudo systemctl restart kiosk
 Raw touch events, no browser involved (Ctrl-C to stop):
 `sudo libinput debug-events | grep -i touch`.
 Which device is the touchscreen: `sudo libinput list-devices | grep -E '^Device|^Kernel|^Capabilities'`.
+
+## Mouse cursor on a touchscreen
+
+cage draws a mouse cursor only while a mouse (or trackpad) is attached: plug one in and the
+cursor appears, unplug it and the cursor goes away. Many touch controllers, though, also
+have a "Mouse" interface that never sends anything, and it counts as a mouse. To see if
+yours does:
+
+```sh
+sudo libinput list-devices | grep -E '^Device|^Kernel|^Group|^Capabilities'
+```
+
+A device with `pointer` capabilities in the same `Group` as the touchscreen is one of these.
+With `IGNORE_TOUCHSCREEN_MOUSE='yes'` (the default), a udev rule makes libinput ignore any
+mouse device that is part of the same USB device as a touchscreen, so cage sees no mouse.
+A separate mouse plugged in for testing is not affected. The rule takes effect at the next
+reboot. To check that it matched:
+`udevadm info /dev/input/eventN | grep LIBINPUT_IGNORE_DEVICE`.
+
+**Known issue (cage 0.1.5, Ubuntu 24.04):** even with no mouse, a hand cursor may show in
+the middle of the screen over a link or button. cage gives the browser mouse focus at
+the start and then draws the cursor the browser asks for, even though there is no mouse.
+cage fixed this upstream in August 2026 ("seat: drop set_cursor requests when pointer
+capability is absent"). This setup will need no changes once Ubuntu ships a cage with that
+fix; until then the hand cursor stays.
 
 ## Reverting to the normal desktop
 

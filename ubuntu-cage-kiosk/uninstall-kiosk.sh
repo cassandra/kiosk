@@ -34,6 +34,7 @@ KIOSK_DIRS=(
     /etc/opt/chrome/policies
     /etc/opt/chrome
     /usr/local/share/kiosk
+    /usr/local/lib/kiosk
     /etc/wireplumber/main.lua.d
     /etc/wireplumber
 )
@@ -82,6 +83,7 @@ fi
 step "Restoring suspend and the desktop login"
 systemctl unmask sleep.target suspend.target hibernate.target hybrid-sleep.target >/dev/null
 systemctl daemon-reload
+udevadm control --reload 2>/dev/null || true
 systemctl set-default graphical.target
 # triggerhappy goes back to its packaged defaults (no kiosk triggers).
 systemctl try-restart triggerhappy.service 2>/dev/null || true

@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+# touchscreen-sibling <devpath>: run by 90-kiosk-touchscreen-mouse.rules for a
+# mouse input device. Succeeds if the same physical device (the same USB
+# device, or for a non-USB device the same HID device) also has a touchscreen.
+#
+# Many touch controllers have an extra "Mouse" interface next to the touch one.
+# It never sends anything, but it makes cage think a mouse is attached, so cage
+# draws a cursor. A mouse that is a device of its own is never matched, so
+# plugging one in still shows the cursor.
+#
+# It reads the kernel's sysfs files rather than udev's database, which may not
+# have the touchscreen yet: the kernel adds both interfaces together.
+set -u
+
+input=$(dirname "/sys$1")             # .../inputN (the rule matches .../inputN/eventM)
+[ -f "$input/capabilities/abs" ] || exit 1
+
+# The physical device: the nearest USB device above it, else the input
+# device's parent (e.g. an I2C-HID touchscreen in a laptop).
+root=$(dirname "$(dirname "$input")")   # .../<device>/input/inputN
+p=$input
+while p=$(dirname "$p"); [ "$p" != /sys ] && [ "$p" != / ]; do
+    if grep -qx 'DEVTYPE=usb_device' "$p/uevent" 2>/dev/null; then
+        root=$p
+        break
+    fi
+done
+
+# is_touchscreen <inputN dir>: INPUT_PROP_DIRECT (on-screen) with ABS_X or
+# ABS_MT_POSITION_X (bits 0 and 53 of the last 64-bit word of the abs bitmap).
+is_touchscreen() {
+    local props abs
+    props=$(cat "$1/properties" 2>/dev/null) || return 1
+    (( (16#$props >> 1) & 1 )) || return 1
+    abs=$(cat "$1/capabilities/abs" 2>/dev/null) || return 1
+    abs=${abs##* }
+    (( (16#$abs & 1) || ((16#$abs >> 53) & 1) ))
+}
+
+# Any other input device of the same physical device that is a touchscreen.
+while IFS= read -r d; do
+    [ "$d" != "$input" ] && is_touchscreen "$d" && exit 0
+done < <(find "$root" -type d -name 'input[0-9]*' -path '*/input/input*' 2>/dev/null)
+exit 1

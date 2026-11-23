@@ -14,6 +14,7 @@
 #   - Scheduled browser restart (daily, or only after a Chrome update), and
 #     Chrome updated by Ubuntu's automatic updates.
 #   - Keyboard volume/mute keys work (triggerhappy -> kiosk-volume).
+#   - No mouse cursor from a touchscreen's unused "Mouse" interface.
 #
 # The files it installs are under rootfs/, at the same paths they get on the
 # system. Files ending in .in are templates: @KIOSK_USER@, @LID_SWITCH_ACTION@,
@@ -193,6 +194,12 @@ case "$AUTO_UPDATE_CHROME" in
     *) die "AUTO_UPDATE_CHROME must be 'yes' or 'no' (got '$AUTO_UPDATE_CHROME')" ;;
 esac
 
+IGNORE_TOUCHSCREEN_MOUSE=$(config_get "$CONFIG" IGNORE_TOUCHSCREEN_MOUSE)
+case "$IGNORE_TOUCHSCREEN_MOUSE" in
+    yes|no) ;;
+    *) die "IGNORE_TOUCHSCREEN_MOUSE must be 'yes' or 'no' (got '$IGNORE_TOUCHSCREEN_MOUSE')" ;;
+esac
+
 # ---------------------------------------------------------------------------
 step "Installing the browser launcher, start page, watchdog and Chrome policy"
 install_file 755 usr/local/bin/kiosk-browser
@@ -236,6 +243,20 @@ if [ -n "$AUDIO_PROFILE" ]; then
 else
     rm -f /etc/wireplumber/main.lua.d/51-kiosk-audio.lua
 fi
+
+# ---------------------------------------------------------------------------
+step "Touchscreen mouse interface: IGNORE_TOUCHSCREEN_MOUSE=$IGNORE_TOUCHSCREEN_MOUSE"
+# Many touch controllers also have a "Mouse" interface. cage draws a cursor
+# whenever any mouse is attached, so have libinput ignore that one. Applies
+# from the next reboot (libinput reads it when the device is added).
+if [ "$IGNORE_TOUCHSCREEN_MOUSE" = yes ]; then
+    install_file 755 usr/local/lib/kiosk/touchscreen-sibling
+    install_file 644 etc/udev/rules.d/90-kiosk-touchscreen-mouse.rules
+else
+    rm -f /etc/udev/rules.d/90-kiosk-touchscreen-mouse.rules /usr/local/lib/kiosk/touchscreen-sibling
+    rmdir --ignore-fail-on-non-empty /usr/local/lib/kiosk 2>/dev/null || true
+fi
+udevadm control --reload 2>/dev/null || true
 
 # ---------------------------------------------------------------------------
 step "Installing systemd units"

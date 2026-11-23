@@ -1,0 +1,18 @@
+# Installed by install-kiosk.sh when IGNORE_TOUCHSCREEN_MOUSE='yes'.
+#
+# Have libinput (and so cage) ignore a touchscreen's extra "Mouse" interface:
+# a mouse device that is part of the same physical device as a touchscreen.
+# Without it cage thinks a mouse is attached and draws a cursor. A separate
+# mouse that gets plugged in is not affected.
+# libinput reads this when a device is added: reboot, or replug, to apply.
+
+ACTION=="remove", GOTO="kiosk_touchscreen_mouse_end"
+SUBSYSTEM!="input", GOTO="kiosk_touchscreen_mouse_end"
+KERNEL!="event*", GOTO="kiosk_touchscreen_mouse_end"
+ENV{ID_INPUT_MOUSE}!="1", GOTO="kiosk_touchscreen_mouse_end"
+ENV{ID_INPUT_TOUCHSCREEN}=="1", GOTO="kiosk_touchscreen_mouse_end"
+ENV{ID_INPUT_TABLET}=="1", GOTO="kiosk_touchscreen_mouse_end"
+
+PROGRAM="/usr/local/lib/kiosk/touchscreen-sibling %p", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+LABEL="kiosk_touchscreen_mouse_end"
